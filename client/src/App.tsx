@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { CatalogList } from './components/CatalogList';
+import OrderHistory from './components/OrderHistory';
 
 interface UserProfile {
   id: number;
@@ -11,6 +12,7 @@ interface UserProfile {
 export default function App() {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [token, setToken] = useState<string | null>(localStorage.getItem('quickorder_token'));
+  const [customerTab, setCustomerTab] = useState<'catalog' | 'history'>('catalog');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -269,9 +271,37 @@ export default function App() {
               </div>
             </div>
 
-            {/* Customer Catalog & Ordering Interface */}
+            {/* Customer Navigation Tabs & Views */}
             {user.role === 'CUSTOMER' && (
-              <CatalogList token={token!} />
+              <div className="mt-4">
+                <ul className="nav nav-pills mb-3 border-bottom pb-3">
+                  <li className="nav-item">
+                    <button 
+                      className={`nav-link ${customerTab === 'catalog' ? 'active' : ''}`}
+                      onClick={() => setCustomerTab('catalog')}
+                    >
+                      <i className="bi bi-grid me-2"></i>Browse Catalog
+                    </button>
+                  </li>
+                  <li className="nav-item ms-2">
+                    <button 
+                      className={`nav-link ${customerTab === 'history' ? 'active' : ''}`}
+                      onClick={() => setCustomerTab('history')}
+                    >
+                      <i className="bi bi-receipt me-2"></i>My Order History
+                    </button>
+                  </li>
+                </ul>
+
+                {customerTab === 'catalog' ? (
+                  <CatalogList token={token!} />
+                ) : (
+                  <OrderHistory 
+                    token={token!} 
+                    onBrowseCatalog={() => setCustomerTab('catalog')} 
+                  />
+                )}
+              </div>
             )}
 
             {/* Operator Notice */}

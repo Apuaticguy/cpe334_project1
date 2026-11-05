@@ -160,3 +160,127 @@ ordersRouter.post('/', requireAuth, async (req: AuthenticatedRequest, res: Respo
     });
   }
 });
+
+// GET /api/orders/my-orders - Retrieve all orders for the authenticated customer
+ordersRouter.get('/my-orders', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      res.status(401).json({
+        success: false,
+        error: { code: 'UNAUTHORIZED', message: 'Authentication required' }
+      });
+      return;
+    }
+
+    const orders = await prisma.order.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        items: true
+      }
+    });
+
+    const data = orders.map((order) => ({
+      id: order.id,
+      status: order.status,
+      totalAmount: Number(order.totalAmount).toFixed(2),
+      createdAt: order.createdAt.toISOString(),
+      updatedAt: order.updatedAt.toISOString(),
+      items: order.items.map((item) => ({
+        id: item.id,
+        catalogItemId: item.catalogItemId,
+        itemName: item.itemNameSnapshot,
+        unitPrice: Number(item.unitPriceSnapshot).toFixed(2),
+        quantity: item.quantity,
+        lineTotal: Number(item.lineTotal).toFixed(2)
+      }))
+    }));
+
+    res.status(200).json({
+      success: true,
+      data
+    });
+  } catch (error) {
+    console.error('Error fetching customer orders:', error);
+    res.status(500).json({
+      success: false,
+      error: { code: 'INTERNAL_ERROR', message: 'Failed to retrieve order history' }
+    });
+  }
+});
+
+// GET /api/orders/:id - Retrieve order details with cross-customer ownership isolation
+ordersRouter.get('/:id', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    const userRole = req.user?.role;
+    if (!userId) {
+      res.status(401).json({
+        success: false,
+        error: { code: 'UNAUTHORIZED', message: 'Authentication required' }
+      });
+      return;
+    }
+
+    const orderId = parseInt(req.params.id, 10);
+    if (isNaN(orderId) || orderId <= 0) {
+      res.status(400).json({
+        success: false,
+        error: { code: 'INVALID_ID', message: 'Invalid order ID' }
+      });
+      return;
+    }
+
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      include: {
+        items: true
+      }
+    });
+
+    if (!order) {
+      res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message: `Order #${orderId} not found` }
+      });
+      return;
+    }
+
+    // BR-04 / AC-10: Ownership Protection - Customers can only view their own orders
+    if (order.userId !== userId && userRole !== 'OPERATOR') {
+      res.status(403).json({
+        success: false,
+        error: { code: 'FORBIDDEN', message: 'You do not have permission to access this order' }
+      });
+      return;
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        id: order.id,
+        userId: order.userId,
+        status: order.status,
+        totalAmount: Number(order.totalAmount).toFixed(2),
+        createdAt: order.createdAt.toISOString(),
+        updatedAt: order.updatedAt.toISOString(),
+        items: order.items.map((item) => ({
+          id: item.id,
+          catalogItemId: item.catalogItemId,
+          itemName: item.itemNameSnapshot,
+          unitPrice: Number(item.unitPriceSnapshot).toFixed(2),
+          quantity: item.quantity,
+          lineTotal: Number(item.lineTotal).toFixed(2)
+        }))
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching order detail:', error);
+    res.status(500).json({
+      success: false,
+      error: { code: 'INTERNAL_ERROR', message: 'Failed to retrieve order detail' }
+    });
+  }
+});
+
