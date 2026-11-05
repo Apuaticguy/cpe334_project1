@@ -3,6 +3,8 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import { Role } from '@prisma/client';
 import { authRouter } from './routes/auth.js';
+import { catalogRouter } from './routes/catalog.js';
+import { ordersRouter } from './routes/orders.js';
 import { requireAuth, requireRole, AuthenticatedRequest } from './middleware/auth.js';
 
 dotenv.config();
@@ -23,6 +25,12 @@ app.get('/api/health', (_req: Request, res: Response) => {
 
 // Authentication routes
 app.use('/api/auth', authRouter);
+
+// Catalog routes (Public / Customers)
+app.use('/api/catalog', catalogRouter);
+
+// Orders routes (Customer order creation & tracking)
+app.use('/api/orders', ordersRouter);
 
 // Role guard test / placeholder operator route
 app.get('/api/operator/orders', requireAuth, requireRole(Role.OPERATOR), (_req: AuthenticatedRequest, res: Response) => {
