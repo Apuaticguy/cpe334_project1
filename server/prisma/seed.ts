@@ -76,6 +76,15 @@ async function main() {
     });
     if (!existing) {
       await prisma.catalogItem.create({ data: item });
+    } else {
+      await prisma.catalogItem.update({
+        where: { id: existing.id },
+        data: {
+          stockQuantity: item.stockQuantity,
+          unitPrice: item.unitPrice,
+          isActive: item.isActive,
+        },
+      });
     }
   }
   console.log('Seeded catalog items successfully.');

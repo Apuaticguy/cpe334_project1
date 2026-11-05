@@ -50,8 +50,8 @@ describe('Feature 3: Customer Order History & Ownership Protection API Tests', (
     operatorToken = loginOp.body.data.token;
 
     // 4. Fetch a catalog item to place test orders
-    const item = await prisma.catalogItem.findFirst({ where: { isActive: true } });
-    if (!item) throw new Error('Seeded catalog item not found');
+    const item = await prisma.catalogItem.findFirst({ where: { isActive: true, stockQuantity: { gt: 5 } } });
+    if (!item) throw new Error('Seeded catalog item with sufficient stock not found');
 
     // Create an order for Customer 1
     const order1Res = await request(app)
