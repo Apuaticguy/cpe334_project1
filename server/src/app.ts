@@ -1,11 +1,10 @@
 import express, { Request, Response } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import { Role } from '@prisma/client';
 import { authRouter } from './routes/auth.js';
 import { catalogRouter } from './routes/catalog.js';
 import { ordersRouter } from './routes/orders.js';
-import { requireAuth, requireRole, AuthenticatedRequest } from './middleware/auth.js';
+import { operatorRouter } from './routes/operator.js';
 
 dotenv.config();
 
@@ -32,10 +31,5 @@ app.use('/api/catalog', catalogRouter);
 // Orders routes (Customer order creation & tracking)
 app.use('/api/orders', ordersRouter);
 
-// Role guard test / placeholder operator route
-app.get('/api/operator/orders', requireAuth, requireRole(Role.OPERATOR), (_req: AuthenticatedRequest, res: Response) => {
-  res.status(200).json({
-    success: true,
-    data: []
-  });
-});
+// Operator routes (Operator Queue & State Transitions)
+app.use('/api/operator', operatorRouter);

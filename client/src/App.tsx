@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { CatalogList } from './components/CatalogList';
 import OrderHistory from './components/OrderHistory';
+import OperatorDashboard from './components/OperatorDashboard';
 
 interface UserProfile {
   id: number;
@@ -304,15 +305,9 @@ export default function App() {
               </div>
             )}
 
-            {/* Operator Notice */}
+            {/* Operator Dashboard */}
             {user.role === 'OPERATOR' && (
-              <div className="mt-4 p-4 border rounded bg-white text-center">
-                <i className="bi bi-clipboard-data text-success fs-1 mb-2"></i>
-                <h5 className="fw-bold">Operator Dashboard</h5>
-                <p className="text-muted small mb-0">
-                  You are signed in as an Operator. The Operator Order Queue & State Transition will be accessible under Feature #4.
-                </p>
-              </div>
+              <OperatorDashboard token={token!} />
             )}
           </div>
         )}
