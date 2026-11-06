@@ -27,7 +27,7 @@
 
 ---
 
-# Part A: Software Requirements Specification (SRS) & Product Scope
+# Answer Part A: Software Requirements Specification (SRS) & Product Scope (10 Points)
 
 ### 1. Stakeholder Problem & Chosen Context
 * **Problem:** Campus food kiosks and merchandise stores suffer from long queues, manual cashier errors during rush hours, paper slip confusion, and lack of real-time stock tracking. Customers face uncertain wait times, while store operators lack an authoritative digital queue to inspect and confirm pre-orders.
@@ -73,7 +73,7 @@
 
 ---
 
-# Part B: Feature Inventory & Traceability Matrix
+# Answer Part B: Feature Inventory & Traceability Matrix (10 Points)
 
 ### Feature Inventory Across All Three Sprints
 
@@ -116,7 +116,7 @@
 
 ---
 
-# Part C: System-Level Software Design Specification (System SDS)
+# Answer Part C: System-Level Software Design Specification (System SDS) (15 Points)
 
 ### 1. Technology Stack Architecture
 * **Frontend:** React 18, TypeScript, Vite, Bootstrap 5, Bootstrap Icons.
@@ -150,7 +150,7 @@
 
 ---
 
-# Part D: Three-Sprint Development Plan
+# Answer Part D: Three-Sprint Development Plan (5 Points)
 
 * **Sprint 1 (Milestone: Deliverable 1 - Due 8 Nov 2026):**
   - Goal: Complete full-stack vertical slice proving architecture, domain rules, persistence, and role guards.
@@ -165,7 +165,7 @@
 
 ---
 
-# Part E: Sprint 1 Engineering Contracts & STS
+# Answer Part E: Sprint 1 Engineering Contracts & STS (20 Points)
 
 ### 1. Acceptance Criteria (AC)
 * **AC-01:** Valid credentials submitted to `POST /api/auth/login` return HTTP 200, an HMAC-SHA256 signed JWT, and user info.
@@ -191,7 +191,7 @@ A Sprint 1 feature is strictly **Done** when:
 
 ---
 
-# Part F: Working Sprint 1 Verification & Evidence
+# Answer Part F: Working Sprint 1 Verification & Evidence (20 Points)
 
 ### 1. Program Demonstrations & Screenshots
 
