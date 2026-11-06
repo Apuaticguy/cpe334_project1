@@ -10,7 +10,7 @@
 
 ### Team Members
 1. **Panyakorn Lohaviboonsap** (Student ID: `67070503424`, GitHub: `@panyakornlohaviboonsap`)
-2. **Ivan** (Student ID: `[Insert Ivan's Student ID]`, GitHub: `@Apuaticguy`)
+2. **Ivan Luwongsuwat** (Student ID: `67070503449`, GitHub: `@Apuaticguy`)
 
 ---
 
@@ -277,7 +277,7 @@ A Sprint 1 feature is strictly **Done** when:
 ### 3. Automated Test Code Excerpts
 
 #### Excerpt 1: Important Domain Business Rule (Server Authoritative Pricing - BR-01 / AC-06)
-From [`server/tests/orders.api.test.ts`](file:///Users/panyakornlohaviboonsap/Documents/KMUTT/Year%203/Software%20Engineering/projectdeliverable1/server/tests/orders.api.test.ts):
+From `server/tests/orders.api.test.ts`:
 ```typescript
 it('[TEST-06 / AC-06] POST /api/orders computes authoritative total, ignores client-tampered prices, and persists order', async () => {
   const qty1 = 2;
@@ -303,7 +303,7 @@ it('[TEST-06 / AC-06] POST /api/orders computes authoritative total, ignores cli
 ```
 
 #### Excerpt 2: Role & Cross-Customer Ownership Restriction (BR-04 / AC-10)
-From [`server/tests/order-history.api.test.ts`](file:///Users/panyakornlohaviboonsap/Documents/KMUTT/Year%203/Software%20Engineering/projectdeliverable1/server/tests/order-history.api.test.ts):
+From `server/tests/order-history.api.test.ts`:
 ```typescript
 it('[TEST-10 / AC-10] GET /api/orders/:id returns 403 Forbidden when Customer A requests Customer B order', async () => {
   // Customer 1 attempts to query Customer 2's private order ID
@@ -348,7 +348,7 @@ All development was executed using the required course workflow:
 | Team Member | Student ID | GitHub | Contribution % | Key Engineering Responsibilities |
 |---|---|---|:---:|---|
 | **Panyakorn Lohaviboonsap** | `67070503424` | `@panyakornlohaviboonsap` | **50%** | Baseline SRS/SDS documentation, User Authentication & JWT lifecycle, Role guard middleware, Customer Order History API & UI, Cross-customer ownership tests, Reviewer for Issues #2 and #4. |
-| **Ivan** | `[Student ID]` | `@Apuaticguy` | **50%** | Catalog model & seed, Authoritative Order Placement engine, Atomic transaction stock deduction, Operator Order Queue & state transitions (`SUBMITTED` $\rightarrow$ `ACCEPTED`), Reviewer for Issues #1 and #3. |
+| **Ivan Luwongsuwat** | `67070503449` | `@Apuaticguy` | **50%** | Catalog model & seed, Authoritative Order Placement engine, Atomic transaction stock deduction, Operator Order Queue & state transitions (`SUBMITTED` $\rightarrow$ `ACCEPTED`), Reviewer for Issues #1 and #3. |
 
 ### 6. AI-Use Declaration
 * **AI Coding Assistants Used:** Google Antigravity (Gemini 3.5/3.8 Flash).
