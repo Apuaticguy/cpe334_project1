@@ -62,7 +62,7 @@ export function CatalogList({ token }: CatalogListProps) {
     }
   };
 
-  const handleQuantityChange = (itemId: number, delta: number, maxStock: number) => {
+  const handleQuantityChange = (itemId: number, delta: number) => {
     setCart((prev) => {
       const current = prev[itemId] || 0;
       const next = current + delta;
@@ -70,9 +70,6 @@ export function CatalogList({ token }: CatalogListProps) {
         const copy = { ...prev };
         delete copy[itemId];
         return copy;
-      }
-      if (next > maxStock) {
-        return prev;
       }
       return { ...prev, [itemId]: next };
     });
@@ -220,20 +217,36 @@ export function CatalogList({ token }: CatalogListProps) {
                           <button
                             type="button"
                             className="btn btn-outline-secondary"
-                            onClick={() => handleQuantityChange(item.id, -1, item.stockQuantity)}
+                            onClick={() => handleQuantityChange(item.id, -1)}
                             disabled={currentQty === 0 || isOutOfStock}
                             aria-label="Decrease quantity"
                           >
                             <i className="bi bi-dash"></i>
                           </button>
-                          <span className="btn btn-outline-secondary disabled px-3 fw-bold text-dark">
-                            {currentQty}
-                          </span>
+                          <input
+                            type="number"
+                            min="0"
+                            className="form-control form-control-sm text-center fw-bold text-dark px-1"
+                            style={{ width: '56px', borderRadius: 0 }}
+                            value={currentQty}
+                            onChange={(e) => {
+                              const val = parseInt(e.target.value) || 0;
+                              setCart((prev) => {
+                                if (val <= 0) {
+                                  const copy = { ...prev };
+                                  delete copy[item.id];
+                                  return copy;
+                                }
+                                return { ...prev, [item.id]: val };
+                              });
+                            }}
+                            aria-label={`Quantity for ${item.name}`}
+                          />
                           <button
                             type="button"
                             className="btn btn-outline-secondary"
-                            onClick={() => handleQuantityChange(item.id, 1, item.stockQuantity)}
-                            disabled={currentQty >= item.stockQuantity || isOutOfStock}
+                            onClick={() => handleQuantityChange(item.id, 1)}
+                            disabled={isOutOfStock}
                             aria-label="Increase quantity"
                           >
                             <i className="bi bi-plus"></i>
