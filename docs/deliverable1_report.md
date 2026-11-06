@@ -203,10 +203,10 @@ A Sprint 1 feature is strictly **Done** when:
 * **Steps:** Log in as Customer $\rightarrow$ browse catalog items $\rightarrow$ add 2 Matcha Lattes and 1 Croissant $\rightarrow$ click Place Order $\rightarrow$ view persisted order under My Order History.
 * **Expected Result:** Order placed with status `SUBMITTED`; server computes authoritative total `$12.25`; line items snapshot price.
 * **Actual Result:** Order created successfully with ID, authoritative total calculated, and displayed in Order History.
-```
-[ INSERT SCREENSHOT: Catalog list with cart items and order placement ]
-[ INSERT SCREENSHOT: Customer My Order History showing persisted order breakdown ]
-```
+
+![Figure 1: Customer Catalog Browsing & Cart Summary](screenshots/screenshot_catalog_cart.png)
+
+![Figure 2: Customer Order History with Persisted Order Breakdown](screenshots/screenshot_order_history.png)
 
 #### Scenario 2: Meaningful Business Rule Rejection (Insufficient Stock & Negative Quantity)
 * **Feature / AC:** F-03 / AC-07, AC-08 (BR-02, BR-03)
@@ -214,9 +214,8 @@ A Sprint 1 feature is strictly **Done** when:
 * **Steps:** Customer attempts to order 999 units of an item with only 15 available in stock.
 * **Expected Result:** Server rejects request with HTTP 422 Unprocessable Entity showing "Insufficient stock".
 * **Actual Result:** Red error alert appears: *"Insufficient stock for KMUTT Hoodie. Available: 15, Requested: 999"*.
-```
-[ INSERT SCREENSHOT: Rejection error message when attempting to order exceeding stock ]
-```
+
+![Figure 3: Business Rule Rejection: Insufficient Stock Error Banner](screenshots/screenshot_stock_validation.png)
 
 #### Scenario 3: Role & Ownership Security Enforcement
 * **Feature / AC:** F-01, F-04 / AC-04, AC-10 (BR-04, BR-05)
@@ -224,9 +223,8 @@ A Sprint 1 feature is strictly **Done** when:
 * **Steps:** Customer attempts to call `/api/operator/orders` or inspect another customer's order ID.
 * **Expected Result:** Server rejects with HTTP 403 Forbidden.
 * **Actual Result:** Verified by automated API tests `TEST-04` and `TEST-10`; client route guards restrict view.
-```
-[ INSERT SCREENSHOT: Operator Dashboard showing live order queue with [Accept Order] action ]
-```
+
+![Figure 4: Operator Order Queue with State Transition (Accepted Order)](screenshots/screenshot_operator_queue.png)
 
 ---
 
@@ -336,10 +334,9 @@ All development was executed using the required course workflow:
 #### Substantive Peer Review Evidence Excerpt (PR #6 - Reviewed by Panyakorn):
 > *"Reviewed the implementation and verified all test suites pass locally. Authoritative Pricing & Stock (AC-06, AC-08): POST /api/orders correctly recalculates line totals from database unit prices, ignores client-submitted totals, and handles stock deduction inside prisma.$transaction. Non-positive quantities (HTTP 400) and out-of-stock requests (HTTP 422) are properly rejected. Both Supertest API integration tests and CatalogList component tests pass cleanly. Approved to merge into sprint1-staging."*
 
-```
-[ INSERT SCREENSHOT: GitHub Kanban Project Board showing all 4 Issues in Done ]
-[ INSERT SCREENSHOT: GitHub Network Graph / Commit History showing feature branches and staging merges ]
-```
+![Figure 5: GitHub Closed Issues - Features #1 to #4 Completed](screenshots/screenshot_github_issues_closed.png)
+
+![Figure 6: GitHub Merged Pull Requests - Feature PRs #5 to #8 and Release PR #9](screenshots/screenshot_github_pull_requests_merged.png)
 
 ---
 
