@@ -23,6 +23,12 @@ async function capture() {
     console.log('Navigating to http://localhost:5173...');
     await page.goto('http://localhost:5173', { waitUntil: 'networkidle0' });
 
+    // Wait for backend health to be online
+    await page.waitForFunction(() => {
+      return document.body.innerText.includes('Backend: Online');
+    }, { timeout: 10000 });
+    console.log('Backend health verified: Online');
+
     // Login as Customer
     console.log('Logging in as Customer...');
     await page.waitForFunction(() => {
@@ -36,7 +42,7 @@ async function capture() {
       if (customerBtn) customerBtn.click();
     });
 
-    await page.waitForNetworkIdle({ timeout: 5000 }).catch(() => {});
+    await page.waitForFunction(() => document.body.innerText.includes('Browse Catalog & Menu'), { timeout: 10000 });
     await new Promise(r => setTimeout(r, 1000));
 
     // Increase Matcha Latte (item 1) qty to 2
@@ -44,9 +50,9 @@ async function capture() {
     const plusButtons = await page.$$('button[aria-label="Increase quantity"]');
     if (plusButtons.length >= 2) {
       await plusButtons[0].click(); // Matcha: 1
-      await new Promise(r => setTimeout(r, 200));
+      await new Promise(r => setTimeout(r, 300));
       await plusButtons[0].click(); // Matcha: 2
-      await new Promise(r => setTimeout(r, 200));
+      await new Promise(r => setTimeout(r, 300));
       await plusButtons[1].click(); // Croissant: 1
       await new Promise(r => setTimeout(r, 500));
     }
@@ -63,7 +69,8 @@ async function capture() {
       const po = btns.find(b => b.textContent && b.textContent.includes('Place Order'));
       if (po) po.click();
     });
-    await new Promise(r => setTimeout(r, 1500));
+    await page.waitForFunction(() => document.body.innerText.includes('Order Placed Successfully'), { timeout: 10000 });
+    await new Promise(r => setTimeout(r, 1000));
 
     // Click "My Order History" tab
     console.log('Navigating to Order History...');
@@ -72,7 +79,8 @@ async function capture() {
       const oh = tabs.find(t => t.textContent && t.textContent.includes('Order History'));
       if (oh) oh.click();
     });
-    await new Promise(r => setTimeout(r, 1500));
+    await page.waitForFunction(() => document.body.innerText.includes('Order #'), { timeout: 10000 });
+    await new Promise(r => setTimeout(r, 1000));
 
     // Save Screenshot 2: Order History
     const file2 = path.join(SCREENSHOT_DIR, 'screenshot_order_history.png');
@@ -103,7 +111,8 @@ async function capture() {
       const poBtn = btns.find(b => b.textContent && b.textContent.includes('Place Order'));
       if (poBtn) poBtn.click();
     });
-    await new Promise(r => setTimeout(r, 1500));
+    await page.waitForFunction(() => document.body.innerText.includes('Insufficient stock'), { timeout: 10000 });
+    await new Promise(r => setTimeout(r, 1000));
 
     // Save Screenshot 3: Stock Validation Error
     const file3 = path.join(SCREENSHOT_DIR, 'screenshot_stock_validation.png');
@@ -125,15 +134,20 @@ async function capture() {
       const opBtn = btns.find(b => b.textContent && b.textContent.includes('operator1@example.com'));
       if (opBtn) opBtn.click();
     });
-    await new Promise(r => setTimeout(r, 1500));
+    await page.waitForFunction(() => document.body.innerText.includes('Operator Order Queue'), { timeout: 10000 });
+    console.log('Operator dashboard loaded.');
+    await new Promise(r => setTimeout(r, 1000));
 
     // In operator dashboard, click "Accept Order" on first submitted order
+    console.log('Accepting order...');
     await page.evaluate(() => {
       const btns = Array.from(document.querySelectorAll('button'));
       const acBtn = btns.find(b => b.textContent && b.textContent.includes('Accept Order'));
       if (acBtn) acBtn.click();
     });
-    await new Promise(r => setTimeout(r, 1500));
+    await page.waitForFunction(() => document.body.innerText.includes('successfully accepted'), { timeout: 10000 });
+    console.log('Order accepted successfully.');
+    await new Promise(r => setTimeout(r, 1000));
 
     // Save Screenshot 4: Operator Queue
     const file4 = path.join(SCREENSHOT_DIR, 'screenshot_operator_queue.png');

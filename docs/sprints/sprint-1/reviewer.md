@@ -99,3 +99,4 @@ In accordance with CPE 334 Engineering Workflow guidelines:
   - Database seed and migrations executed cleanly against PostgreSQL.
   - Release tagged as `v1.0.0-sprint1` on `main`.
 * **Merged by:** Team into `main` (Commit `46015d589fc18622d8677bde95c3944fda3ffa08`).
+
