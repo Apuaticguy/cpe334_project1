@@ -20,7 +20,7 @@
 |---|---|---|---|
 | **Part A** | Software Requirements Specification (SRS) & Scope | FR-01 to FR-08, BR-01 to BR-06, NFR-01 to NFR-04 | Section 1 |
 | **Part B** | Feature Inventory & Traceability Matrix | F-01 to F-11 mapped across Sprints 1, 2, 3 | Section 2 |
-| **Part C** | System-Level Software Design Specification (SDS) | React $\rightarrow$ Express $\rightarrow$ Prisma/PostgreSQL, ER Model, Role Matrix | Section 3 |
+| **Part C** | System-Level Software Design Specification (SDS) | React → Express → Prisma/PostgreSQL, ER Model, Role Matrix | Section 3 |
 | **Part D** | Three-Sprint Development Plan | Sprint 1 (Nov 8), Sprint 2 (Nov 29), Sprint 3 (Dec 13) | Section 4 |
 | **Part E** | Sprint 1 Engineering Contracts & STS | AC-01 to AC-13, TEST-01 to TEST-15, Definition of Done | Section 5 |
 | **Part F** | Working Sprint 1 Verification & Evidence | Live Demos, Test Output, Test Excerpts, PR Reviews, Contribution Table | Section 6 |
@@ -34,12 +34,12 @@
 * **Context:** **QuickOrder** is a pre-order and fulfillment system designed for campus kiosks. Customers browse live catalog items, add quantities, and submit pre-orders. Store operators monitor incoming orders and accept valid orders for preparation.
 
 ### 2. Actors and Responsibilities
-* **Customer:** Authenticated user who browses active catalog items, places orders, inspects own order history, and tracks status transitions (`SUBMITTED` $\rightarrow$ `ACCEPTED`). Resticted to own records.
+* **Customer:** Authenticated user who browses active catalog items, places orders, inspects own order history, and tracks status transitions (`SUBMITTED` → `ACCEPTED`). Resticted to own records.
 * **Operator:** Store staff who inspects the live incoming order queue, views customer identities and line items, and accepts valid orders. Cannot alter customer identities or place orders masquerading as customers.
 * **System / Guest:** Unauthenticated visitor who can check service health and browse public catalog listings in read-only mode.
 
 ### 3. Scope and Explicit Exclusions
-* **In Scope (Sprint 1):** Seeded demo accounts (`CUSTOMER`, `OPERATOR`) with bcrypt password hashing; token-based authentication (`/api/auth/login`, `/logout`, `/me`); seeded catalog items; server-authoritative price calculation and stock validation; unit price snapshot preservation on line items; customer order history with strict cross-customer isolation; operator incoming order queue and order acceptance state transition (`SUBMITTED` $\rightarrow$ `ACCEPTED`); 100% automated test coverage.
+* **In Scope (Sprint 1):** Seeded demo accounts (`CUSTOMER`, `OPERATOR`) with bcrypt password hashing; token-based authentication (`/api/auth/login`, `/logout`, `/me`); seeded catalog items; server-authoritative price calculation and stock validation; unit price snapshot preservation on line items; customer order history with strict cross-customer isolation; operator incoming order queue and order acceptance state transition (`SUBMITTED` → `ACCEPTED`); 100% automated test coverage.
 * **Explicit Exclusions:** Real credit card/payment gateways (simulated only per course guidelines); self-registration, public signups, and password resets; SMS/LINE notifications; multi-store franchise inventory networks.
 
 ### 4. Functional Requirements (FR)
@@ -49,19 +49,19 @@
 * **FR-04:** Preserve snapshot unit prices on each `OrderItem` at time of purchase against future catalog price changes.
 * **FR-05:** Allow customers to retrieve their own past orders and view line-item breakdowns.
 * **FR-06:** Provide an operator view displaying incoming orders in descending chronological order.
-* **FR-07:** Allow operators to accept submitted orders (`SUBMITTED` $\rightarrow$ `ACCEPTED`) with timestamp logging.
+* **FR-07:** Allow operators to accept submitted orders (`SUBMITTED` → `ACCEPTED`) with timestamp logging.
 * **FR-08:** Securely terminate sessions and purge client credentials upon logout.
 
 ### 5. Business Rules (BR)
 * **BR-01 (Server Authoritative Pricing):** The client shall never dictate order totals or item prices. The backend computes order amounts from database prices. Client totals are ignored.
-* **BR-02 (Positive Quantity Validation):** An order must contain at least one item, and each item must have an integer quantity $q \ge 1$. Zero or negative quantities are rejected with HTTP 400.
+* **BR-02 (Positive Quantity Validation):** An order must contain at least one item, and each item must have an integer quantity quantity ≥ 1. Zero or negative quantities are rejected with HTTP 400.
 * **BR-03 (Stock Availability Enforcement):** An order requesting inactive items or quantities exceeding available stock is rejected with HTTP 422 before creation.
 * **BR-04 (Cross-Customer Data Isolation):** Customers may only access orders where `order.userId == current_user.id`. Customer A querying Customer B's order is rejected with HTTP 403 Forbidden.
 * **BR-05 (Operator Role Protection):** Operator queue and state transition endpoints are restricted to users with the `OPERATOR` role. Customers receive HTTP 403 Forbidden.
 * **BR-06 (Valid State Machine Transition):** An order may only be accepted if its current status is `SUBMITTED`. Attempting to accept an already accepted or cancelled order returns HTTP 409 Conflict.
 
 ### 6. Non-Functional Requirements (NFR)
-* **NFR-01 (Credential Protection):** All user passwords stored in the database are hashed with bcrypt (salt rounds $\ge 10$). Plaintext passwords are never stored or logged. *(Sprint 1; TEST-01)*
+* **NFR-01 (Credential Protection):** All user passwords stored in the database are hashed with bcrypt (salt rounds ≥ 10). Plaintext passwords are never stored or logged. *(Sprint 1; TEST-01)*
 * **NFR-02 (Authorization Boundary):** Unauthenticated requests to protected endpoints return HTTP 401 Unauthorized without leaking private records. *(Sprint 1; TEST-04)*
 * **NFR-03 (Transactional Atomicity):** Order creation, line item creation, and inventory stock decrement execute inside an atomic database transaction (`prisma.$transaction`). *(Sprint 1; TEST-06)*
 * **NFR-04 (Performance Latency):** Catalog and order endpoints respond within 500ms under standard local execution. *(Sprint 1; API Smoke)*
@@ -83,10 +83,10 @@
 | **F-02** | Catalog Browsing & Live Availability | Public and authenticated viewing of catalog items, unit prices, descriptions, and stock quantities. | **Sprint 1** | Customer, Guest | None |
 | **F-03** | Authoritative Order Placement | Customer order submission with line items; server calculates totals authoritatively and decrements stock. | **Sprint 1** | Customer | F-01, F-02 |
 | **F-04** | Customer Order History & Detail View | Customer retrieves past orders and line-item breakdowns with cross-customer data isolation. | **Sprint 1** | Customer | F-01, F-03 |
-| **F-05** | Operator Order Queue & State Acceptance | Operators inspect incoming order queue and accept submitted orders (`SUBMITTED` $\rightarrow$ `ACCEPTED`). | **Sprint 1** | Operator | F-01, F-03 |
+| **F-05** | Operator Order Queue & State Acceptance | Operators inspect incoming order queue and accept submitted orders (`SUBMITTED` → `ACCEPTED`). | **Sprint 1** | Operator | F-01, F-03 |
 | **F-06** | Catalog & Inventory Administration | Operators add new items, modify unit prices, update descriptions, and restock inventory. | **Sprint 2** | Operator | F-01, F-02 |
 | **F-07** | Order Cancellation & Rejection Workflow | Customers cancel pending orders before acceptance; operators reject orders with reasons. | **Sprint 2** | Customer, Operator | F-03, F-05 |
-| **F-08** | Simulated Payment Processing | Simulated payment status transitions (`UNPAID` $\rightarrow$ `PAID` $\rightarrow$ `REFUNDED`) and receipts. | **Sprint 2** | Customer, Operator | F-03, F-07 |
+| **F-08** | Simulated Payment Processing | Simulated payment status transitions (`UNPAID` → `PAID` → `REFUNDED`) and receipts. | **Sprint 2** | Customer, Operator | F-03, F-07 |
 | **F-09** | Order Fulfillment & Ready-for-Pickup | Status transitions to `READY_FOR_PICKUP` and `COMPLETED` with timestamp logs. | **Sprint 3** | Operator | F-05, F-08 |
 | **F-10** | Sales Analytics & Reporting Dashboard | Aggregate revenue reporting, top items, and daily sales summaries. | **Sprint 3** | Operator | F-03, F-09 |
 | **F-11** | Customer Favorite Orders & Re-Order | Customers save favorite orders and re-order with one click. | **Sprint 3** | Customer | F-04 |
@@ -104,12 +104,12 @@
 | **FR-07** | Operator order acceptance transition | F-05 | Sprint 1 | AC-12 / TEST-12 (`operator.api.test.ts`) | **PASS** |
 | **FR-08** | User session logout | F-01 | Sprint 1 | AC-08 / TEST-08 (`auth.api.test.ts`) | **PASS** |
 | **BR-01** | Server authoritative pricing (client total ignored) | F-03 | Sprint 1 | AC-06 / TEST-06 (`orders.api.test.ts`) | **PASS** |
-| **BR-02** | Positive quantity ($q \ge 1$) validation | F-03 | Sprint 1 | AC-07 / TEST-07 (`orders.api.test.ts`) | **PASS** |
+| **BR-02** | Positive quantity (quantity ≥ 1) validation | F-03 | Sprint 1 | AC-07 / TEST-07 (`orders.api.test.ts`) | **PASS** |
 | **BR-03** | Out-of-stock item rejection (422) | F-03 | Sprint 1 | AC-08 / TEST-08 (`orders.api.test.ts`) | **PASS** |
 | **BR-04** | Cross-customer isolation (403 Forbidden) | F-04 | Sprint 1 | AC-10 / TEST-10 (`order-history.api.test.ts`) | **PASS** |
 | **BR-05** | Operator role protection (403 Forbidden) | F-05 | Sprint 1 | AC-04 / TEST-04 (`auth.api.test.ts`) | **PASS** |
 | **BR-06** | Valid state transition & conflict rejection (409) | F-05 | Sprint 1 | AC-13 / TEST-13 (`operator.api.test.ts`) | **PASS** |
-| **NFR-01** | Bcrypt password hashing (salt $\ge 10$) | F-01 | Sprint 1 | AC-01 / TEST-01 (`auth.api.test.ts`) | **PASS** |
+| **NFR-01** | Bcrypt password hashing (salt ≥ 10) | F-01 | Sprint 1 | AC-01 / TEST-01 (`auth.api.test.ts`) | **PASS** |
 | **NFR-02** | Unauthenticated 401 rejection | F-01 | Sprint 1 | AC-03 / TEST-03 (`auth.api.test.ts`) | **PASS** |
 | **NFR-03** | Atomic transaction integrity | F-03 | Sprint 1 | AC-06 / TEST-06 (`orders.api.test.ts`) | **PASS** |
 | **NFR-04** | API response time under 500ms | System | Sprint 1 | AC-05, AC-06 / Test Suite execution (870ms total) | **PASS** |
@@ -126,9 +126,9 @@
 
 ### 2. Entity Relationship Model
 * **`User` (table: `users`):** `id` (PK), `email` (UK), `passwordHash`, `fullName`, `role` (`CUSTOMER` | `OPERATOR`), `createdAt`.
-* **`CatalogItem` (table: `catalog_items`):** `id` (PK), `name`, `description`, `unitPrice` (Decimal 10,2), `stockQuantity` (Int $\ge 0$), `isActive` (Boolean), `createdAt`.
-* **`Order` (table: `orders`):** `id` (PK), `userId` (FK $\rightarrow$ `users.id`), `status` (`SUBMITTED` | `ACCEPTED` | `CANCELLED`), `totalAmount` (Decimal 10,2), `createdAt`, `updatedAt`.
-* **`OrderItem` (table: `order_items`):** `id` (PK), `orderId` (FK $\rightarrow$ `orders.id`), `catalogItemId` (FK $\rightarrow$ `catalog_items.id`), `itemNameSnapshot`, `unitPriceSnapshot` (Decimal 10,2), `quantity` (Int $\ge 1$), `lineTotal` (Decimal 10,2).
+* **`CatalogItem` (table: `catalog_items`):** `id` (PK), `name`, `description`, `unitPrice` (Decimal 10,2), `stockQuantity` (Int ≥ 0), `isActive` (Boolean), `createdAt`.
+* **`Order` (table: `orders`):** `id` (PK), `userId` (FK → `users.id`), `status` (`SUBMITTED` | `ACCEPTED` | `CANCELLED`), `totalAmount` (Decimal 10,2), `createdAt`, `updatedAt`.
+* **`OrderItem` (table: `order_items`):** `id` (PK), `orderId` (FK → `orders.id`), `catalogItemId` (FK → `catalog_items.id`), `itemNameSnapshot`, `unitPriceSnapshot` (Decimal 10,2), `quantity` (Int ≥ 1), `lineTotal` (Decimal 10,2).
 
 ### 3. Role & Permission Matrix
 
@@ -139,7 +139,7 @@
 | **Get Current User** | `GET /api/auth/me` | 401 | Allowed | Allowed | Own identity |
 | **Place Order** | `POST /api/orders` | 401 | Allowed | 403 | Bound to `current_user.id` |
 | **View My Orders** | `GET /api/orders/my-orders` | 401 | Allowed | 403 | Only `userId == current_user.id` |
-| **View Order Detail** | `GET /api/orders/:id` | 401 | Conditional | Allowed | 403 if Customer $\neq$ `order.userId` |
+| **View Order Detail** | `GET /api/orders/:id` | 401 | Conditional | Allowed | 403 if Customer ≠ `order.userId` |
 | **View Operator Queue** | `GET /api/operator/orders` | 401 | 403 | Allowed | Operator role only |
 | **Accept Order** | `PATCH /api/operator/orders/:id/accept` | 401 | 403 | Allowed | Operator role only |
 
@@ -204,10 +204,10 @@ A Sprint 1 feature is strictly **Done** when:
 
 *(Paste your application screenshots in the boxes below)*
 
-#### Scenario 1: Complete Normal Domain Journey (Customer Catalog $\rightarrow$ Checkout $\rightarrow$ Order History)
+#### Scenario 1: Complete Normal Domain Journey (Customer Catalog → Checkout → Order History)
 * **Feature / AC:** F-02, F-03, F-04 / AC-05, AC-06, AC-09
 * **Actor:** Customer (`customer1@example.com`)
-* **Steps:** Log in as Customer $\rightarrow$ browse catalog items $\rightarrow$ add 2 Matcha Lattes and 1 Croissant $\rightarrow$ click Place Order $\rightarrow$ view persisted order under My Order History.
+* **Steps:** Log in as Customer → browse catalog items → add 2 Matcha Lattes and 1 Croissant → click Place Order → view persisted order under My Order History.
 * **Expected Result:** Order placed with status `SUBMITTED`; server computes authoritative total `$12.25`; line items snapshot price.
 * **Actual Result:** Order created successfully with ID, authoritative total calculated, and displayed in Order History.
 
@@ -328,7 +328,7 @@ it('[TEST-10 / AC-10] GET /api/orders/:id returns 403 Forbidden when Customer A 
 ### 4. Git Workflow, Peer Review & History Evidence
 
 All development was executed using the required course workflow:  
-`sprint1-staging` $\rightarrow$ `feature/<issue-number>-<name>` $\rightarrow$ Pull Request $\rightarrow$ Peer Review $\rightarrow$ Merge into `sprint1-staging` $\rightarrow$ Release PR into `main`.
+`sprint1-staging` → `feature/<issue-number>-<name>` → Pull Request → Peer Review → Merge into `sprint1-staging` → Release PR into `main`.
 
 | Issue # | Feature Description | Branch Name | Author | Peer Reviewer | PR # | Merge Status |
 |---|---|---|---|---|:---:|:---:|
@@ -354,7 +354,7 @@ All development was executed using the required course workflow:
 | Team Member | Student ID | GitHub | Contribution % | Key Engineering Responsibilities |
 |---|---|---|:---:|---|
 | **Panyakorn Lohaviboonsap** | `67070503424` | `@panyakornlohaviboonsap` | **50%** | Baseline SRS/SDS documentation, User Authentication & JWT lifecycle, Role guard middleware, Customer Order History API & UI, Cross-customer ownership tests, Reviewer for Issues #2 and #4. |
-| **Ivan Luwongsuwat** | `67070503449` | `@Apuaticguy` | **50%** | Catalog model & seed, Authoritative Order Placement engine, Atomic transaction stock deduction, Operator Order Queue & state transitions (`SUBMITTED` $\rightarrow$ `ACCEPTED`), Reviewer for Issues #1 and #3. |
+| **Ivan Luwongsuwat** | `67070503449` | `@Apuaticguy` | **50%** | Catalog model & seed, Authoritative Order Placement engine, Atomic transaction stock deduction, Operator Order Queue & state transitions (`SUBMITTED` → `ACCEPTED`), Reviewer for Issues #1 and #3. |
 
 ### 6. AI-Use Declaration & Prompt Reflection
 * **AI Coding Assistants Used:** Google Antigravity (Gemini 3.5 / Gemini Flash).

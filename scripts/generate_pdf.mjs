@@ -18,77 +18,103 @@ async function generatePDF() {
     if (fs.existsSync(absPath)) {
       const b64 = fs.readFileSync(absPath).toString('base64');
       const dataUri = `data:image/png;base64,${b64}`;
-      mdContent = mdContent.replace(fullMatch, `![${alt}](${dataUri})`);
+      mdContent = mdContent.replace(fullMatch, `<figure class="report-figure"><img src="${dataUri}" alt="${alt}" /><figcaption>${alt}</figcaption></figure>`);
     }
   }
+
+  // Pre-process markdown: give Answer Part headings a dedicated section class for clean page breaks
+  mdContent = mdContent.replace(/# Answer Part ([A-F]):/g, '<div class="part-page-break"></div>\n\n# Answer Part $1:');
 
   console.log('Rendering Markdown to HTML...');
   const htmlBody = marked.parse(mdContent);
 
   const fullHtml = `
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>CPE 334 - Deliverable 1 Report</title>
+  <title>CPE 334 - Deliverable 1 Engineering Report</title>
   <style>
     @page {
       size: A4;
-      margin: 18mm 16mm 20mm 16mm;
-      @bottom-right {
-        content: counter(page);
-      }
+      margin: 20mm 18mm 22mm 18mm;
+    }
+    *, *::before, *::after {
+      box-sizing: border-box;
     }
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
-      font-size: 10pt;
-      line-height: 1.5;
-      color: #24292f;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      font-size: 9.5pt;
+      line-height: 1.55;
+      color: #1e293b;
+      margin: 0;
+      padding: 0;
+      text-rendering: optimizeLegibility;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Clean Section Page Breaks */
+    .part-page-break {
+      page-break-before: always;
+      height: 0;
       margin: 0;
       padding: 0;
     }
+
+    /* Headings */
     h1 {
-      font-size: 18pt;
-      border-bottom: 2px solid #0969da;
+      font-size: 16pt;
+      font-weight: 700;
+      color: #0f172a;
+      border-bottom: 2px solid #2563eb;
       padding-bottom: 6px;
-      margin-top: 24pt;
+      margin-top: 20pt;
       margin-bottom: 12pt;
-      color: #1f2328;
       page-break-after: avoid;
     }
     h2 {
-      font-size: 14pt;
-      border-bottom: 1px solid #d0d7de;
+      font-size: 13pt;
+      font-weight: 600;
+      color: #1e293b;
+      border-bottom: 1px solid #e2e8f0;
       padding-bottom: 4px;
-      margin-top: 18pt;
+      margin-top: 16pt;
       margin-bottom: 8pt;
-      color: #1f2328;
       page-break-after: avoid;
     }
     h3 {
-      font-size: 12pt;
-      margin-top: 14pt;
-      margin-bottom: 6pt;
-      color: #1f2328;
+      font-size: 11pt;
+      font-weight: 600;
+      color: #334155;
+      margin-top: 12pt;
+      margin-bottom: 5pt;
       page-break-after: avoid;
     }
     h4 {
-      font-size: 10.5pt;
+      font-size: 10pt;
+      font-weight: 600;
+      color: #475569;
       margin-top: 10pt;
       margin-bottom: 4pt;
-      color: #1f2328;
       page-break-after: avoid;
     }
-    p, ul, ol {
+
+    p {
+      margin-top: 0;
+      margin-bottom: 7pt;
+      text-align: justify;
+    }
+
+    ul, ol {
       margin-top: 0;
       margin-bottom: 8pt;
-    }
-    ul, ol {
       padding-left: 20px;
     }
     li {
-      margin-bottom: 3pt;
+      margin-bottom: 2.5pt;
     }
+
+    /* Tables */
     table {
       width: 100%;
       border-collapse: collapse;
@@ -98,32 +124,37 @@ async function generatePDF() {
       page-break-inside: avoid;
     }
     th, td {
-      border: 1px solid #d0d7de;
+      border: 1px solid #cbd5e1;
       padding: 5pt 7pt;
       text-align: left;
       vertical-align: top;
     }
     th {
-      background-color: #f6f8fa;
+      background-color: #f1f5f9;
+      color: #0f172a;
       font-weight: 600;
     }
     tr:nth-child(even) td {
-      background-color: #fcfcfc;
+      background-color: #f8fafc;
     }
+
+    /* Code & Terminal */
     code {
       font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
       font-size: 8.5pt;
-      background-color: rgba(175, 184, 193, 0.2);
-      padding: 1.5pt 3pt;
+      background-color: #f1f5f9;
+      color: #0f172a;
+      padding: 1.5pt 3.5pt;
       border-radius: 3px;
+      border: 1px solid #e2e8f0;
     }
     pre {
-      background-color: #f6f8fa;
-      border: 1px solid #d0d7de;
-      border-radius: 5px;
-      padding: 8pt 10pt;
+      background-color: #0f172a;
+      color: #f8fafc;
+      border-radius: 6px;
+      padding: 9pt 11pt;
       font-size: 8pt;
-      line-height: 1.4;
+      line-height: 1.45;
       overflow-x: auto;
       page-break-inside: avoid;
       margin-top: 6pt;
@@ -131,40 +162,93 @@ async function generatePDF() {
     }
     pre code {
       background: none;
+      border: none;
       padding: 0;
+      color: inherit;
       font-size: inherit;
     }
+
+    /* Blockquotes (Code Review) */
     blockquote {
-      border-left: 4px solid #0969da;
-      color: #57606a;
-      padding: 4pt 10pt;
+      border-left: 4px solid #2563eb;
+      background-color: #f8fafc;
+      color: #334155;
+      padding: 6pt 12pt;
       margin: 8pt 0;
-      background-color: #f6f8fa;
+      border-radius: 0 4px 4px 0;
+      font-style: italic;
       page-break-inside: avoid;
     }
-    img {
-      max-width: 100%;
+    blockquote p {
+      margin-bottom: 0;
+    }
+
+    /* Figures & Screenshots */
+    .report-figure {
+      margin: 12pt 0;
+      padding: 6pt;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      background-color: #ffffff;
+      text-align: center;
+      page-break-inside: avoid;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    }
+    .report-figure img {
+      max-width: 98%;
       height: auto;
-      border: 1px solid #d0d7de;
-      border-radius: 4px;
-      margin-top: 6pt;
-      margin-bottom: 10pt;
-      display: block;
-      page-break-inside: avoid;
+      border-radius: 3px;
+      border: 1px solid #e2e8f0;
+      display: inline-block;
     }
+    .report-figure figcaption {
+      margin-top: 6pt;
+      font-size: 8.5pt;
+      font-weight: 600;
+      color: #475569;
+    }
+
     hr {
       height: 1px;
-      background-color: #d0d7de;
+      background-color: #e2e8f0;
       border: none;
-      margin: 16pt 0;
+      margin: 14pt 0;
     }
-    .header-banner {
-      background: #f6f8fa;
-      border: 1px solid #d0d7de;
-      border-left: 4px solid #0969da;
-      padding: 8pt 12pt;
-      margin-bottom: 14pt;
-      border-radius: 4px;
+
+    /* Title Block Header */
+    .university-header {
+      border-bottom: 2px solid #0f172a;
+      padding-bottom: 12pt;
+      margin-bottom: 18pt;
+    }
+    .university-header .sub-title {
+      font-size: 11pt;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #475569;
+      font-weight: 600;
+      margin-bottom: 2pt;
+    }
+    .university-header .main-title {
+      font-size: 20pt;
+      font-weight: 800;
+      color: #0f172a;
+      margin: 4pt 0 10pt 0;
+      line-height: 1.25;
+    }
+    .meta-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10pt;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      padding: 10pt 14pt;
+      margin-top: 10pt;
+      font-size: 9pt;
+    }
+    .meta-grid strong {
+      color: #0f172a;
     }
   </style>
 </head>
@@ -175,7 +259,7 @@ async function generatePDF() {
 `;
 
   const outputPath = path.resolve('docs/deliverable1_report.pdf');
-  console.log('Launching Chrome to generate PDF...');
+  console.log('Launching Chrome to generate polished PDF...');
   const browser = await puppeteer.launch({
     executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
     headless: true,
@@ -196,16 +280,15 @@ async function generatePDF() {
     },
     printBackground: true,
     displayHeaderFooter: true,
-    headerTemplate: '<div style="font-size:8pt; font-family:sans-serif; color:#656d76; width:100%; text-align:right; padding-right:16mm;">CPE 334 — Deliverable 1 (QuickOrder)</div>',
-    footerTemplate: '<div style="font-size:8pt; font-family:sans-serif; color:#656d76; width:100%; text-align:center;">Page <span class="pageNumber"></span> of <span class="totalPages"></span></div>'
+    headerTemplate: '<div style="font-size:8pt; font-family:-apple-system, sans-serif; color:#64748b; width:100%; text-align:right; padding-right:16mm; border-bottom:1px solid #e2e8f0; padding-bottom:3px;">CPE 334 — Project Deliverable 1: QuickOrder</div>',
+    footerTemplate: '<div style="font-size:8pt; font-family:-apple-system, sans-serif; color:#64748b; width:100%; display:flex; justify-content:space-between; padding:0 16mm; border-top:1px solid #e2e8f0; padding-top:3px;"><span>Department of Computer Engineering, KMUTT</span><span>Page <span class="pageNumber"></span> of <span class="totalPages"></span></span></div>'
   });
 
   await browser.close();
-  console.log(`Successfully generated PDF: ${outputPath}`);
+  console.log(`Successfully generated polished PDF: ${outputPath}`);
 }
 
 generatePDF().catch(err => {
   console.error('PDF Generation Error:', err);
   process.exit(1);
 });
-
