@@ -7,7 +7,7 @@
 - **Application Name**: **QuickOrder** (Campus Food & Beverage / Retail Pre-Order System)
 - **Team Members**:
   - Panyakorn Lohaviboonsap (Student ID: `67070503424`, GitHub: `@panyakornlohaviboonsap`)
-  - Ivan (GitHub: `@Apuaticguy`)
+  - Ivan Luwongsuwat (Student ID: `67070503449`, GitHub: `@Apuaticguy`)
 
 ---
 

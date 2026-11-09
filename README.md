@@ -11,7 +11,7 @@
 | Name | Student ID | GitHub Username | Role / Responsibility |
 |---|---|---|---|
 | **Panyakorn Lohaviboonsap** | `67070503424` | [`@panyakornlohaviboonsap`](https://github.com/panyakornlohaviboonsap) | Full-Stack Engineer (Auth & Order History) |
-| **Ivan** | *(Student ID)* | [`@Apuaticguy`](https://github.com/Apuaticguy) | Full-Stack Engineer (Catalog & Order Queue) |
+| **Ivan Luwongsuwat** | `67070503449` | [`@Apuaticguy`](https://github.com/Apuaticguy) | Full-Stack Engineer (Catalog & Order Queue) |
 
 ---
 
@@ -43,6 +43,9 @@ The complete engineering baseline is version-controlled in the repository:
 * **Part C: System-Level SDS:** [`docs/system-sds.md`](docs/system-sds.md)
 * **Part D: Three-Sprint Plan:** [`docs/sprints/plan.md`](docs/sprints/plan.md)
 * **Part E: Sprint 1 Engineering Contracts & STS:** [`docs/sprints/sprint-1/specifications.md`](docs/sprints/sprint-1/specifications.md) & [`docs/sprints/sprint-1/tests.md`](docs/sprints/sprint-1/tests.md)
+* **Sprint 1 Peer Review Log:** [`docs/sprints/sprint-1/reviewer.md`](docs/sprints/sprint-1/reviewer.md)
+* **Sprint 1 AI-Use Declaration & Prompts:** [`docs/sprints/sprint-1/ai-use.md`](docs/sprints/sprint-1/ai-use.md)
+* **Deliverable 1 Master Report (Parts A-F):** [`docs/deliverable1_report.md`](docs/deliverable1_report.md)
 * **AI Coding Agent Guidelines:** [`AGENTS.md`](AGENTS.md)
 
 ---

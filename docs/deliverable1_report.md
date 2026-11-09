@@ -182,12 +182,19 @@
 * **AC-12:** `PATCH /api/operator/orders/:id/accept` transitions order status from `SUBMITTED` to `ACCEPTED`.
 * **AC-13:** Calling accept on an already accepted or cancelled order returns HTTP 409 Conflict.
 
-### 2. Product Definition of Done (DoD)
+### 2. Product Definition of Done (DoD) & Engineering Workflow
 A Sprint 1 feature is strictly **Done** when:
-1. All domain rules, endpoints, and UI screens match the feature specification.
-2. All mapped Supertest and Vitest test cases execute and pass cleanly with zero skipped assertions.
-3. Database migrations and seed execute idempotently.
-4. Feature developed on an isolated feature branch, reviewed by the teammate on GitHub with substantive comments, and merged by the reviewer into `sprint1-staging`.
+1. **Requirements & Scope:** All domain business rules, REST API contracts, and responsive UI screens match the feature specification (`docs/sprints/sprint-1/specifications.md`).
+2. **Automated Testing:** All mapped Supertest API integration tests and Vitest UI component tests execute and pass cleanly with zero skipped assertions (100% pass rate).
+3. **Database Integrity:** PostgreSQL migrations and seed scripts execute idempotently without data loss.
+4. **Git Kanban Discipline:** Managed on the GitHub Project board through the 6 required statuses:
+   - `Backlog` (Issue created and assigned)
+   - `Specified` (Requirements and acceptance criteria reviewed)
+   - `Started` (Feature branch `feature/<issue>-<name>` created and active)
+   - `PR Review` (PR opened to `sprint1-staging`, issue linked in Development panel)
+   - `Fixing` (Review feedback addressed or tests corrected)
+   - `Done` (Peer-reviewed, approved, and merged by the reviewer into `sprint1-staging`)
+5. **Peer Review Agreement:** The author never merges their own PR; the peer reviewer conducts code review, comments on line items, approves, and clicks **Merge pull request**. Both parties reply to all comments before closing conversations. Complete review logs are maintained in `docs/sprints/sprint-1/reviewer.md`.
 
 ---
 
@@ -334,6 +341,8 @@ All development was executed using the required course workflow:
 #### Substantive Peer Review Evidence Excerpt (PR #6 - Reviewed by Panyakorn):
 > *"Reviewed the implementation and verified all test suites pass locally. Authoritative Pricing & Stock (AC-06, AC-08): POST /api/orders correctly recalculates line totals from database unit prices, ignores client-submitted totals, and handles stock deduction inside prisma.$transaction. Non-positive quantities (HTTP 400) and out-of-stock requests (HTTP 422) are properly rejected. Both Supertest API integration tests and CatalogList component tests pass cleanly. Approved to merge into sprint1-staging."*
 
+*(Full peer review history, inline comments, author responses, and approvals for PRs #5, #6, #7, #8, and #9 are documented in [`docs/sprints/sprint-1/reviewer.md`](sprints/sprint-1/reviewer.md)).*
+
 ![Figure 5: GitHub Closed Issues - Features #1 to #4 Completed](screenshots/screenshot_github_issues_closed.png)
 
 ![Figure 6: GitHub Merged Pull Requests - Feature PRs #5 to #8 and Release PR #9](screenshots/screenshot_github_pull_requests_merged.png)
@@ -347,7 +356,9 @@ All development was executed using the required course workflow:
 | **Panyakorn Lohaviboonsap** | `67070503424` | `@panyakornlohaviboonsap` | **50%** | Baseline SRS/SDS documentation, User Authentication & JWT lifecycle, Role guard middleware, Customer Order History API & UI, Cross-customer ownership tests, Reviewer for Issues #2 and #4. |
 | **Ivan Luwongsuwat** | `67070503449` | `@Apuaticguy` | **50%** | Catalog model & seed, Authoritative Order Placement engine, Atomic transaction stock deduction, Operator Order Queue & state transitions (`SUBMITTED` $\rightarrow$ `ACCEPTED`), Reviewer for Issues #1 and #3. |
 
-### 6. AI-Use Declaration
-* **AI Coding Assistants Used:** Google Antigravity (Gemini 3.5/3.8 Flash).
-* **Tasks Assisted:** Drafting baseline SRS and SDS documentation templates, scaffolding Vite and Prisma boilerplate, generating test scenario boundary assertions (negative quantities, stock limits, 403 cross-customer checks).
-* **Human Supervision & Verification:** Both students reviewed every generated file, verified all database constraints, validated test execution against course acceptance criteria, and conducted manual code reviews and PR approvals.
+### 6. AI-Use Declaration & Prompt Reflection
+* **AI Coding Assistants Used:** Google Antigravity (Gemini 3.5 / Gemini Flash).
+* **Selected Prompts & Reflection Document:** Fully documented in [`docs/sprints/sprint-1/ai-use.md`](sprints/sprint-1/ai-use.md) with 8 key engineering prompts spanning Spec DD, database schema modeling, TDD negative test matrices, role guard middlewares, atomic transactional order deduction, and automated visual verification.
+* **Specification-Agent Reflection:** Using the AI as a Specification Agent prior to coding compelled the team to formalize domain boundaries (e.g., distinguishing HTTP 400 for negative quantities vs HTTP 422 for insufficient stock) and establish unambiguous acceptance criteria (AC-01 through AC-13).
+* **Coding-Agent Reflection:** Rapid boilerplate scaffolding was balanced by strict TDD discipline. Vitest integration suites against real PostgreSQL caught floating-point precision issues early, enforcing authoritative Decimal calculations on the backend.
+* **Human Supervision & Verification:** Every single AI-generated line of code was compiled locally, peer-reviewed, tested against the database, and merged only after 100% of automated tests passed. AI never approved or merged code.
