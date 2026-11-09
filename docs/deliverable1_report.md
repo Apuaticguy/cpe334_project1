@@ -202,8 +202,6 @@ A Sprint 1 feature is strictly **Done** when:
 
 ### 1. Program Demonstrations & Screenshots
 
-*(Paste your application screenshots in the boxes below)*
-
 #### Scenario 1: Complete Normal Domain Journey (Customer Catalog → Checkout → Order History)
 * **Feature / AC:** F-02, F-03, F-04 / AC-05, AC-06, AC-09
 * **Actor:** Customer (`customer1@example.com`)
