@@ -10,12 +10,15 @@ async function main() {
   console.log('Seeding QuickOrder database...');
 
   const saltRounds = 10;
-  const passwordHash = await bcrypt.hash('Password123!', saltRounds);
+  const demoPassword = process.env.DEMO_USER_PASSWORD || 'Password123!';
+  const passwordHash = await bcrypt.hash(demoPassword, saltRounds);
 
   // 1. Seed Customer account
   const customer = await prisma.user.upsert({
     where: { email: 'customer1@example.com' },
-    update: {},
+    update: {
+      passwordHash,
+    },
     create: {
       email: 'customer1@example.com',
       passwordHash,
@@ -28,7 +31,9 @@ async function main() {
   // 2. Seed Operator account
   const operator = await prisma.user.upsert({
     where: { email: 'operator1@example.com' },
-    update: {},
+    update: {
+      passwordHash,
+    },
     create: {
       email: 'operator1@example.com',
       passwordHash,
