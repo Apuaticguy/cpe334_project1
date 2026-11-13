@@ -29,5 +29,9 @@ describe('API Health and Readiness Probes', () => {
     expect(res.body.db).toBe('disconnected');
     querySpy.mockRestore();
   });
+
+  it('deliberate failure to verify merge gate blocks broken PR (Check C-02)', () => {
+    expect('ci-gate-check').toBe('should-fail-to-block-merge');
+  });
 });
 
