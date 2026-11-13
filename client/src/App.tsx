@@ -113,6 +113,7 @@ export default function App() {
           <a className="navbar-brand fw-bold d-flex align-items-center" href="#">
             <i className="bi bi-bag-check-fill text-primary fs-4 me-2"></i>
             <span>QuickOrder</span>
+            <span className="badge bg-success ms-2 fs-6">v1.1-cloud</span>
           </a>
 
           <div className="d-flex align-items-center gap-3">
