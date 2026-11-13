@@ -87,7 +87,7 @@ sh -c "npx prisma migrate deploy && npm run seed"
 
 | Resource Type | Resource Name | Purpose | Configuration Details |
 | :--- | :--- | :--- | :--- |
-| **GCP Project** | `cpe334-quickorder` | Central project holding all lab resources | Region: `asia-southeast1` |
+| **GCP Project** | `cpe334-514417` | Central project holding all lab resources (Project #32598816138) | Region: `asia-southeast1` |
 | **Cloud Run Service** | `quickorder` | Hosts unified web application & REST API | Memory: `512Mi`, CPU: `1`, Min: `0`, Max: `3`, Port: `3000` |
 | **Cloud Run Job** | `quickorder-migrate` | Executes additive schema migrations and idempotent seeds | Max retries: `1`, Timeout: `300s` |
 | **Cloud SQL Instance** | `quickorder-pg` | Managed PostgreSQL database | Edition: `Enterprise`, Tier: `db-f1-micro`, Storage auto-increase: **OFF** |
