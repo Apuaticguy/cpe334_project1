@@ -65,7 +65,9 @@ export function CatalogList({ token }: CatalogListProps) {
   const handleQuantityChange = (itemId: number, delta: number) => {
     setCart((prev) => {
       const current = prev[itemId] || 0;
-      const next = current + delta;
+      const targetItem = items.find((i) => i.id === itemId);
+      const maxStock = targetItem ? targetItem.stockQuantity : Infinity;
+      const next = Math.min(current + delta, maxStock);
       if (next <= 0) {
         const copy = { ...prev };
         delete copy[itemId];
@@ -231,13 +233,14 @@ export function CatalogList({ token }: CatalogListProps) {
                             value={currentQty}
                             onChange={(e) => {
                               const val = parseInt(e.target.value) || 0;
+                              const capped = Math.min(val, item.stockQuantity);
                               setCart((prev) => {
-                                if (val <= 0) {
+                                if (capped <= 0) {
                                   const copy = { ...prev };
                                   delete copy[item.id];
                                   return copy;
                                 }
-                                return { ...prev, [item.id]: val };
+                                return { ...prev, [item.id]: capped };
                               });
                             }}
                             aria-label={`Quantity for ${item.name}`}
@@ -246,7 +249,7 @@ export function CatalogList({ token }: CatalogListProps) {
                             type="button"
                             className="btn btn-outline-secondary"
                             onClick={() => handleQuantityChange(item.id, 1)}
-                            disabled={isOutOfStock}
+                            disabled={isOutOfStock || currentQty >= item.stockQuantity}
                             aria-label="Increase quantity"
                           >
                             <i className="bi bi-plus"></i>
