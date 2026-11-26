@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import OrderHistory from '../src/components/OrderHistory';
 
 describe('OrderHistory Component Tests', () => {
@@ -72,5 +72,98 @@ describe('OrderHistory Component Tests', () => {
 
     expect(screen.getByText(/You haven't placed any orders in this session/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /browse catalog/i })).toBeInTheDocument();
+  });
+
+  // TEST-19 / AC-16: Render Cancel Order button only on SUBMITTED orders and update status on click
+  it('[TEST-19 / AC-16] renders Cancel Order button only on SUBMITTED orders and updates status to CANCELLED on click', async () => {
+    const mockOrders = [
+      {
+        id: 101,
+        status: 'SUBMITTED',
+        totalAmount: '4.50',
+        createdAt: '2026-11-26T10:00:00.000Z',
+        updatedAt: '2026-11-26T10:00:00.000Z',
+        items: [
+          {
+            id: 1,
+            catalogItemId: 1,
+            itemName: 'Iced Matcha Latte',
+            unitPrice: '4.50',
+            quantity: 1,
+            lineTotal: '4.50'
+          }
+        ]
+      },
+      {
+        id: 102,
+        status: 'ACCEPTED',
+        totalAmount: '3.25',
+        createdAt: '2026-11-26T09:00:00.000Z',
+        updatedAt: '2026-11-26T09:05:00.000Z',
+        items: [
+          {
+            id: 2,
+            catalogItemId: 2,
+            itemName: 'Artisan Croissant',
+            unitPrice: '3.25',
+            quantity: 1,
+            lineTotal: '3.25'
+          }
+        ]
+      }
+    ];
+
+    const fetchMock = vi.fn().mockImplementation((url: string, options?: RequestInit) => {
+      if (url === '/api/orders/my-orders') {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({ success: true, data: mockOrders })
+        } as Response);
+      }
+      if (url === '/api/orders/101/cancel' && options?.method === 'PATCH') {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            success: true,
+            data: {
+              ...mockOrders[0],
+              status: 'CANCELLED',
+              updatedAt: '2026-11-26T10:02:00.000Z'
+            }
+          })
+        } as Response);
+      }
+      return Promise.reject(new Error(`Unexpected fetch: ${url}`));
+    });
+    global.fetch = fetchMock as any;
+
+    render(<OrderHistory token={dummyToken} onBrowseCatalog={() => {}} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Order #101')).toBeInTheDocument();
+      expect(screen.getByText('Order #102')).toBeInTheDocument();
+    });
+
+    // Only one Cancel Order button should be rendered (for SUBMITTED Order #101, not ACCEPTED Order #102)
+    const cancelButtons = screen.getAllByRole('button', { name: /cancel order/i });
+    expect(cancelButtons).toHaveLength(1);
+
+    // Click Cancel Order on Order #101
+    fireEvent.click(cancelButtons[0]);
+
+    await waitFor(() => {
+      expect(screen.getByText('CANCELLED')).toBeInTheDocument();
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/orders/101/cancel',
+      expect.objectContaining({
+        method: 'PATCH',
+        headers: expect.objectContaining({ Authorization: `Bearer ${dummyToken}` })
+      })
+    );
+    expect(screen.queryByRole('button', { name: /cancel order/i })).not.toBeInTheDocument();
   });
 });

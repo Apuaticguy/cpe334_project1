@@ -3,7 +3,7 @@ import request from 'supertest';
 import { app } from '../src/app.js';
 import { prisma } from '../src/prisma.js';
 import bcrypt from 'bcryptjs';
-import { Role } from '@prisma/client';
+import { Role, OrderStatus } from '@prisma/client';
 
 describe('Feature 3: Customer Order History & Ownership Protection API Tests', () => {
   let customer1Token: string;
@@ -148,5 +148,149 @@ describe('Feature 3: Customer Order History & Ownership Protection API Tests', (
     const res = await request(app).get(`/api/orders/${customer1OrderId}`);
     expect(res.status).toBe(401);
     expect(res.body.success).toBe(false);
+  });
+
+  // ---------------------------------------------------------------------------
+  // Lab 7 (Issue #30 / #32): Customer Order Cancellation & Atomic Stock Restore
+  // ---------------------------------------------------------------------------
+
+  // TEST-16 / AC-14: Owning CUSTOMER cancels SUBMITTED order -> 200 OK & stock restored
+  it('[TEST-16 / AC-14] PATCH /api/orders/:id/cancel transitions SUBMITTED order to CANCELLED and atomically restores stock', async () => {
+    const item = await prisma.catalogItem.findFirst({ where: { isActive: true, stockQuantity: { gte: 5 } } });
+    if (!item) throw new Error('Seeded catalog item with sufficient stock not found');
+    const stockBeforeOrder = item.stockQuantity;
+    const orderQty = 2;
+
+    // Place a fresh SUBMITTED order for Customer 1 (deducts stock by 2)
+    const createRes = await request(app)
+      .post('/api/orders')
+      .set('Authorization', `Bearer ${customer1Token}`)
+      .send({ items: [{ catalogItemId: item.id, quantity: orderQty }] });
+    expect(createRes.status).toBe(201);
+    const targetOrderId = createRes.body.data.id;
+
+    const itemAfterOrder = await prisma.catalogItem.findUnique({ where: { id: item.id } });
+    expect(itemAfterOrder!.stockQuantity).toBe(stockBeforeOrder - orderQty);
+
+    // Cancel own SUBMITTED order
+    const cancelRes = await request(app)
+      .patch(`/api/orders/${targetOrderId}/cancel`)
+      .set('Authorization', `Bearer ${customer1Token}`);
+
+    expect(cancelRes.status).toBe(200);
+    expect(cancelRes.body.success).toBe(true);
+    expect(cancelRes.body.data.id).toBe(targetOrderId);
+    expect(cancelRes.body.data.status).toBe(OrderStatus.CANCELLED);
+
+    // Verify PostgreSQL order status and restored stock
+    const dbOrder = await prisma.order.findUnique({ where: { id: targetOrderId } });
+    expect(dbOrder!.status).toBe(OrderStatus.CANCELLED);
+
+    const itemAfterCancel = await prisma.catalogItem.findUnique({ where: { id: item.id } });
+    expect(itemAfterCancel!.stockQuantity).toBe(stockBeforeOrder);
+
+    // Preserved BR-06 guard: Operator cannot accept a CANCELLED order (409 Conflict)
+    const acceptRes = await request(app)
+      .patch(`/api/operator/orders/${targetOrderId}/accept`)
+      .set('Authorization', `Bearer ${operatorToken}`);
+    expect(acceptRes.status).toBe(409);
+  });
+
+  // TEST-17 / AC-15: Cannot cancel ACCEPTED or already CANCELLED order -> 409 ORDER_NOT_CANCELLABLE
+  it('[TEST-17 / AC-15] PATCH /api/orders/:id/cancel returns 409 ORDER_NOT_CANCELLABLE for ACCEPTED or CANCELLED orders', async () => {
+    const item = await prisma.catalogItem.findFirst({ where: { isActive: true, stockQuantity: { gte: 5 } } });
+    if (!item) throw new Error('Seeded catalog item with sufficient stock not found');
+
+    // Create order and have Operator accept it
+    const orderRes = await request(app)
+      .post('/api/orders')
+      .set('Authorization', `Bearer ${customer1Token}`)
+      .send({ items: [{ catalogItemId: item.id, quantity: 1 }] });
+    expect(orderRes.status).toBe(201);
+    const acceptedOrderId = orderRes.body.data.id;
+
+    const acceptRes = await request(app)
+      .patch(`/api/operator/orders/${acceptedOrderId}/accept`)
+      .set('Authorization', `Bearer ${operatorToken}`);
+    expect(acceptRes.status).toBe(200);
+
+    const stockBeforeAttempt = (await prisma.catalogItem.findUnique({ where: { id: item.id } }))!.stockQuantity;
+
+    // Attempt to cancel ACCEPTED order -> 409 Conflict
+    const cancelAcceptedRes = await request(app)
+      .patch(`/api/orders/${acceptedOrderId}/cancel`)
+      .set('Authorization', `Bearer ${customer1Token}`);
+
+    expect(cancelAcceptedRes.status).toBe(409);
+    expect(cancelAcceptedRes.body.success).toBe(false);
+    expect(cancelAcceptedRes.body.error.code).toBe('ORDER_NOT_CANCELLABLE');
+
+    const stockAfterAcceptedAttempt = (await prisma.catalogItem.findUnique({ where: { id: item.id } }))!.stockQuantity;
+    expect(stockAfterAcceptedAttempt).toBe(stockBeforeAttempt);
+
+    // Also create and cancel an order once, then re-cancel -> 409 Conflict (no double stock restore!)
+    const order2Res = await request(app)
+      .post('/api/orders')
+      .set('Authorization', `Bearer ${customer1Token}`)
+      .send({ items: [{ catalogItemId: item.id, quantity: 1 }] });
+    const cancelledOrderId = order2Res.body.data.id;
+
+    const firstCancel = await request(app)
+      .patch(`/api/orders/${cancelledOrderId}/cancel`)
+      .set('Authorization', `Bearer ${customer1Token}`);
+    expect(firstCancel.status).toBe(200);
+
+    const stockAfterFirstCancel = (await prisma.catalogItem.findUnique({ where: { id: item.id } }))!.stockQuantity;
+    const secondCancel = await request(app)
+      .patch(`/api/orders/${cancelledOrderId}/cancel`)
+      .set('Authorization', `Bearer ${customer1Token}`);
+
+    expect(secondCancel.status).toBe(409);
+    expect(secondCancel.body.success).toBe(false);
+    expect(secondCancel.body.error.code).toBe('ORDER_NOT_CANCELLABLE');
+    expect((await prisma.catalogItem.findUnique({ where: { id: item.id } }))!.stockQuantity).toBe(stockAfterFirstCancel);
+  });
+
+  // TEST-18 / AC-16: Non-owning CUSTOMER, OPERATOR (403), unauthenticated (401), and unknown ID (404)
+  it('[TEST-18 / AC-16] PATCH /api/orders/:id/cancel enforces ownership, CUSTOMER-only role (403), auth (401), and existence (404)', async () => {
+    const item = await prisma.catalogItem.findFirst({ where: { isActive: true, stockQuantity: { gte: 5 } } });
+    if (!item) throw new Error('Seeded catalog item with sufficient stock not found');
+
+    const orderRes = await request(app)
+      .post('/api/orders')
+      .set('Authorization', `Bearer ${customer1Token}`)
+      .send({ items: [{ catalogItemId: item.id, quantity: 1 }] });
+    expect(orderRes.status).toBe(201);
+    const targetOrderId = orderRes.body.data.id;
+    const stockBefore = (await prisma.catalogItem.findUnique({ where: { id: item.id } }))!.stockQuantity;
+
+    // 1. Unauthenticated -> 401
+    const unauthRes = await request(app).patch(`/api/orders/${targetOrderId}/cancel`);
+    expect(unauthRes.status).toBe(401);
+
+    // 2. Non-owning CUSTOMER (Customer 2) -> 403 Forbidden
+    const otherCustRes = await request(app)
+      .patch(`/api/orders/${targetOrderId}/cancel`)
+      .set('Authorization', `Bearer ${customer2Token}`);
+    expect(otherCustRes.status).toBe(403);
+    expect(otherCustRes.body.success).toBe(false);
+
+    // 3. OPERATOR role -> 403 Forbidden
+    const opRes = await request(app)
+      .patch(`/api/orders/${targetOrderId}/cancel`)
+      .set('Authorization', `Bearer ${operatorToken}`);
+    expect(opRes.status).toBe(403);
+    expect(opRes.body.success).toBe(false);
+
+    // 4. Unknown order ID -> 404 Not Found
+    const notFoundRes = await request(app)
+      .patch('/api/orders/999999/cancel')
+      .set('Authorization', `Bearer ${customer1Token}`);
+    expect(notFoundRes.status).toBe(404);
+
+    // Verify order stays SUBMITTED and stock stays unchanged
+    const dbOrder = await prisma.order.findUnique({ where: { id: targetOrderId } });
+    expect(dbOrder!.status).toBe(OrderStatus.SUBMITTED);
+    expect((await prisma.catalogItem.findUnique({ where: { id: item.id } }))!.stockQuantity).toBe(stockBefore);
   });
 });

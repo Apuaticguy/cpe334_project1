@@ -22,7 +22,7 @@ Campus food and merchandise kiosks encounter long wait times, inefficient orderi
 
 | Actor | Responsibilities | Permissions & Access Scope |
 |---|---|---|
-| **Customer** | • Browse available catalog items and live unit prices.<br>• Assemble cart items and submit orders.<br>• View own order history and persisted order details.<br>• Track order status (`SUBMITTED`, `ACCEPTED`, `REJECTED`, etc.). | • May only access catalog and **own** order records.<br>• Cannot alter authoritative catalog prices.<br>• Cannot modify another customer's order.<br>• Cannot access operator fulfillment views. |
+| **Customer** | • Browse available catalog items and live unit prices.<br>• Assemble cart items and submit orders.<br>• View own order history and persisted order details.<br>• Cancel own `SUBMITTED` orders (`SUBMITTED` $\rightarrow$ `CANCELLED`) with automatic stock restoration.<br>• Track order status (`SUBMITTED`, `ACCEPTED`, `CANCELLED`). | • May only access catalog and **own** order records.<br>• Cannot alter authoritative catalog prices.<br>• Cannot modify or cancel another customer's order.<br>• Cannot access operator fulfillment views. |
 | **Operator** | • View live incoming order queue across the kiosk.<br>• Inspect order line items and customer identifiers.<br>• Accept incoming orders (`SUBMITTED` $\rightarrow$ `ACCEPTED`).<br>• In later sprints: manage catalog pricing, inventory stock, and mark orders fulfilled. | • Full access to order processing and fulfillment endpoints.<br>• Cannot place orders masquerading as another customer.<br>• All status changes are logged with operator timestamp. |
 | **System / Unauthenticated Visitor** | • View system health status.<br>• View public catalog listing (read-only). | • Cannot access protected endpoints without a valid session token.<br>• Unauthenticated requests are rejected with `401 Unauthorized`. |
 
@@ -58,6 +58,7 @@ Campus food and merchandise kiosks encounter long wait times, inefficient orderi
 * **FR-06 (Operator Order Queue):** The system shall provide an operator view listing all incoming orders in descending chronological order with customer identity, order total, status, and creation timestamp.
 * **FR-07 (Operator Order Acceptance):** The system shall allow operators to transition an order from `SUBMITTED` to `ACCEPTED` and record the transition timestamp.
 * **FR-08 (Session Termination):** The system shall invalidate the active session upon logout and purge client-side session state.
+* **FR-09 (Customer Order Cancellation — Lab 7 Revision):** The system shall allow an authenticated `CUSTOMER` who owns an order (`order.userId == current_user.id`) to cancel that order via `PATCH /api/orders/:id/cancel` while its status is `SUBMITTED`, transitioning status to `CANCELLED`.
 
 ---
 
@@ -69,6 +70,7 @@ Campus food and merchandise kiosks encounter long wait times, inefficient orderi
 * **BR-04 (Cross-Customer Data Isolation):** A customer MUST ONLY view orders where `order.userId == current_user.id`. Any attempt by Customer A to query Customer B's order by ID shall be rejected with `403 Forbidden`.
 * **BR-05 (Operator Role Protection):** Only authenticated users with the `OPERATOR` role may access operator queue endpoints and execute the `accept` transition. Customer attempts shall be rejected with `403 Forbidden`.
 * **BR-06 (Valid State Machine Transition):** An order may only be transitioned to `ACCEPTED` if its current status is `SUBMITTED`. Attempting to accept an order that is cancelled, already accepted, or in an invalid state shall be rejected with `409 Conflict`.
+* **BR-07 (Order Cancellation Boundary & Atomic Stock Restoration — Lab 7 Revision):** Only the owning `CUSTOMER` may cancel an order, and only while `order.status === 'SUBMITTED'`. Attempting to cancel an `ACCEPTED` or already `CANCELLED` order shall be rejected with `409 Conflict`. Non-owners or `OPERATOR` users attempting cancellation shall be rejected with `403 Forbidden`. Valid cancellation MUST atomically update `status` to `CANCELLED` and increment `catalog_items.stockQuantity` for every `OrderItem` inside a single database transaction.
 
 ---
 

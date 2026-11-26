@@ -27,6 +27,8 @@ export default function OrderHistory({ token, onBrowseCatalog }: OrderHistoryPro
   const [orders, setOrders] = useState<OrderRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [actionFeedback, setActionFeedback] = useState<{ type: 'success' | 'danger'; message: string } | null>(null);
+  const [cancellingId, setCancellingId] = useState<number | null>(null);
   const [expandedOrderId, setExpandedOrderId] = useState<number | null>(null);
 
   const fetchOrders = async () => {
@@ -58,6 +60,34 @@ export default function OrderHistory({ token, onBrowseCatalog }: OrderHistoryPro
 
   const toggleExpand = (id: number) => {
     setExpandedOrderId(expandedOrderId === id ? null : id);
+  };
+
+  const handleCancelOrder = async (orderId: number) => {
+    setCancellingId(orderId);
+    setActionFeedback(null);
+    try {
+      const res = await fetch(`/api/orders/${orderId}/cancel`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        throw new Error(json.error?.message || `Failed to cancel Order #${orderId}`);
+      }
+      const updatedOrder: OrderRecord = json.data;
+      setOrders((prev) => prev.map((o) => (o.id === orderId ? updatedOrder : o)));
+      setActionFeedback({
+        type: 'success',
+        message: `Order #${orderId} has been cancelled and item stock restored.`
+      });
+    } catch (err: any) {
+      setActionFeedback({
+        type: 'danger',
+        message: err.message || `Unable to cancel Order #${orderId}`
+      });
+    } finally {
+      setCancellingId(null);
+    }
   };
 
   const getStatusBadge = (status: string) => {
@@ -131,10 +161,31 @@ export default function OrderHistory({ token, onBrowseCatalog }: OrderHistoryPro
         </button>
       </div>
 
+      {actionFeedback && (
+        <div
+          className={`alert alert-${actionFeedback.type} alert-dismissible fade show d-flex align-items-center mb-3`}
+          role="alert"
+        >
+          <i
+            className={`bi ${
+              actionFeedback.type === 'success' ? 'bi-check-circle-fill' : 'bi-exclamation-triangle-fill'
+            } me-2`}
+          ></i>
+          <div>{actionFeedback.message}</div>
+          <button
+            type="button"
+            className="btn-close"
+            aria-label="Close"
+            onClick={() => setActionFeedback(null)}
+          ></button>
+        </div>
+      )}
+
       <div className="d-flex flex-column gap-3">
         {orders.map((order) => {
           const isExpanded = expandedOrderId === order.id;
           const formattedDate = new Date(order.createdAt).toLocaleString();
+          const isCancelling = cancellingId === order.id;
 
           return (
             <div key={order.id} className="card shadow-sm border-0 overflow-hidden">
@@ -152,6 +203,28 @@ export default function OrderHistory({ token, onBrowseCatalog }: OrderHistoryPro
                 </div>
 
                 <div className="d-flex align-items-center gap-3">
+                  {order.status === 'SUBMITTED' && (
+                    <button
+                      type="button"
+                      className="btn btn-outline-danger btn-sm fw-semibold"
+                      disabled={isCancelling}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleCancelOrder(order.id);
+                      }}
+                    >
+                      {isCancelling ? (
+                        <>
+                          <span className="spinner-border spinner-border-sm me-1" role="status"></span>
+                          Cancelling...
+                        </>
+                      ) : (
+                        <>
+                          <i className="bi bi-x-circle me-1"></i> Cancel Order
+                        </>
+                      )}
+                    </button>
+                  )}
                   <span className="fs-5 fw-bold text-primary">
                     ${order.totalAmount}
                   </span>

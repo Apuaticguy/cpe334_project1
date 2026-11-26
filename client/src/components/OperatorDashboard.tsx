@@ -333,6 +333,10 @@ export default function OperatorDashboard({ token }: OperatorDashboardProps) {
                                 </>
                               )}
                             </button>
+                          ) : order.status === 'CANCELLED' ? (
+                            <button className="btn btn-light btn-sm text-secondary border disabled" disabled>
+                              <i className="bi bi-x-circle me-1"></i> Cancelled
+                            </button>
                           ) : (
                             <button className="btn btn-light btn-sm text-success border disabled" disabled>
                               <i className="bi bi-check2-all me-1"></i> Accepted

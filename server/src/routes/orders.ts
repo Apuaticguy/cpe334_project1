@@ -1,5 +1,5 @@
 import { Router, Response } from 'express';
-import { Prisma, OrderStatus } from '@prisma/client';
+import { Prisma, OrderStatus, Role } from '@prisma/client';
 import { prisma } from '../prisma.js';
 import { requireAuth, AuthenticatedRequest } from '../middleware/auth.js';
 
@@ -280,6 +280,123 @@ ordersRouter.get('/:id', requireAuth, async (req: AuthenticatedRequest, res: Res
     res.status(500).json({
       success: false,
       error: { code: 'INTERNAL_ERROR', message: 'Failed to retrieve order detail' }
+    });
+  }
+});
+
+// PATCH /api/orders/:id/cancel - Cancel own SUBMITTED order and atomically restore stock (FR-09 / BR-07)
+ordersRouter.patch('/:id/cancel', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    const userRole = req.user?.role;
+    if (!userId) {
+      res.status(401).json({
+        success: false,
+        error: { code: 'UNAUTHORIZED', message: 'Authentication required' }
+      });
+      return;
+    }
+
+    const orderId = parseInt(req.params.id, 10);
+    if (isNaN(orderId) || orderId <= 0) {
+      res.status(400).json({
+        success: false,
+        error: { code: 'INVALID_ID', message: 'Invalid order ID' }
+      });
+      return;
+    }
+
+    const existingOrder = await prisma.order.findUnique({
+      where: { id: orderId },
+      include: { items: true }
+    });
+
+    if (!existingOrder) {
+      res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message: `Order #${orderId} not found` }
+      });
+      return;
+    }
+
+    // BR-07 / AC-16: Only owning CUSTOMER may cancel their order
+    if (userRole !== Role.CUSTOMER || existingOrder.userId !== userId) {
+      res.status(403).json({
+        success: false,
+        error: { code: 'FORBIDDEN', message: 'Only the owning customer may cancel this order' }
+      });
+      return;
+    }
+
+    // BR-07 / AC-15: Only SUBMITTED orders may be cancelled
+    if (existingOrder.status !== OrderStatus.SUBMITTED) {
+      res.status(409).json({
+        success: false,
+        error: {
+          code: 'ORDER_NOT_CANCELLABLE',
+          message: `Order #${orderId} cannot be cancelled because its status is ${existingOrder.status}`
+        }
+      });
+      return;
+    }
+
+    // Atomic state update + inventory restoration inside single database transaction
+    const cancelledOrder = await prisma.$transaction(async (tx) => {
+      const updated = await tx.order.updateMany({
+        where: { id: orderId, status: OrderStatus.SUBMITTED },
+        data: { status: OrderStatus.CANCELLED }
+      });
+
+      if (updated.count !== 1) {
+        throw new Error('ORDER_NOT_CANCELLABLE');
+      }
+
+      for (const item of existingOrder.items) {
+        await tx.catalogItem.update({
+          where: { id: item.catalogItemId },
+          data: { stockQuantity: { increment: item.quantity } }
+        });
+      }
+
+      return tx.order.findUniqueOrThrow({
+        where: { id: orderId },
+        include: { items: true }
+      });
+    });
+
+    res.status(200).json({
+      success: true,
+      data: {
+        id: cancelledOrder.id,
+        status: cancelledOrder.status,
+        totalAmount: Number(cancelledOrder.totalAmount).toFixed(2),
+        createdAt: cancelledOrder.createdAt.toISOString(),
+        updatedAt: cancelledOrder.updatedAt.toISOString(),
+        items: cancelledOrder.items.map((item) => ({
+          id: item.id,
+          catalogItemId: item.catalogItemId,
+          itemName: item.itemNameSnapshot,
+          unitPrice: Number(item.unitPriceSnapshot).toFixed(2),
+          quantity: item.quantity,
+          lineTotal: Number(item.lineTotal).toFixed(2)
+        }))
+      }
+    });
+  } catch (error: any) {
+    if (error?.message === 'ORDER_NOT_CANCELLABLE') {
+      res.status(409).json({
+        success: false,
+        error: {
+          code: 'ORDER_NOT_CANCELLABLE',
+          message: 'Order can no longer be cancelled because its status changed'
+        }
+      });
+      return;
+    }
+    console.error('Error cancelling order:', error);
+    res.status(500).json({
+      success: false,
+      error: { code: 'INTERNAL_ERROR', message: 'Failed to cancel order' }
     });
   }
 });

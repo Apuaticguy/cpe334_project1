@@ -1,8 +1,8 @@
 # Software Test Specification (STS) - Sprint 1
 
 **Project:** QuickOrder (Theme 4: E-Commerce or Ordering System)  
-**Document Version:** 1.0.0  
-**Status:** Approved Test Plan  
+**Document Version:** 1.1.0 (Lab 7 Contract Revision — Issue #30)  
+**Status:** Revised Test Plan (Pre-Implementation Review)  
 
 ---
 
@@ -25,6 +25,10 @@
 | **TEST-13** | AC-13 | API / Int | Logged in Operator; Order #1 is already `ACCEPTED` | `PATCH /api/operator/orders/1/accept` | 409 Conflict, invalid transition rejected | `server/tests/operator.api.test.ts` |
 | **TEST-14** | AC-05 | UI / Vitest | Catalog API mocked | Render `<CatalogList />` component | Displays item cards, stock status, and add-to-cart buttons | `client/tests/CatalogList.test.tsx` |
 | **TEST-15** | AC-09 | UI / Vitest | Orders API mocked with empty array | Render `<OrderHistory />` component | Displays empty state: "You have not placed any orders yet" | `client/tests/OrderHistory.test.tsx` |
+| **TEST-16** | AC-14 | API / Int | Owning `CUSTOMER` logged in; Order is `SUBMITTED` (stock deducted) | `PATCH /api/orders/:id/cancel` | 200 OK; `status` = `CANCELLED`; `catalog_items.stockQuantity` atomically restored | `server/tests/order-history.api.test.ts` |
+| **TEST-17** | AC-15 | API / Int | Owning `CUSTOMER` logged in; Order is `ACCEPTED` (or `CANCELLED`) | `PATCH /api/orders/:id/cancel` | 409 Conflict (`ORDER_NOT_CANCELLABLE`); status & stock unchanged | `server/tests/order-history.api.test.ts` |
+| **TEST-18** | AC-16 | API / Int | Non-owning `CUSTOMER` or `OPERATOR` logged in; Order is `SUBMITTED` | `PATCH /api/orders/:id/cancel` | 403 Forbidden; order status & stock unchanged | `server/tests/order-history.api.test.ts` |
+| **TEST-19** | AC-16 | UI / Vitest | Mocked `SUBMITTED` and `ACCEPTED` orders | Render `<OrderHistory />` and click "Cancel Order" on `SUBMITTED` order | "Cancel Order" button shown only on `SUBMITTED`; clicking calls `PATCH /api/orders/:id/cancel` and updates badge to `CANCELLED` | `client/tests/OrderHistory.test.tsx` |
 
 ---
 
