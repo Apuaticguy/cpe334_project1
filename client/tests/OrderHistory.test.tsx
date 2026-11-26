@@ -166,4 +166,43 @@ describe('OrderHistory Component Tests', () => {
     );
     expect(screen.queryByRole('button', { name: /cancel order/i })).not.toBeInTheDocument();
   });
+
+  // TEST-S2-14 (F-07 portion) / AC-S2-05: Render REJECTED badge and rejectionReason to customer
+  it('[TEST-S2-14 / AC-S2-05] renders REJECTED badge and operator rejection reason in customer order history', async () => {
+    const mockOrders = [
+      {
+        id: 205,
+        status: 'REJECTED',
+        rejectionReason: 'Store closed early due to power maintenance',
+        totalAmount: '4.50',
+        createdAt: '2026-11-26T10:00:00.000Z',
+        updatedAt: '2026-11-26T10:05:00.000Z',
+        items: [
+          {
+            id: 1,
+            catalogItemId: 1,
+            itemName: 'Iced Matcha Latte',
+            unitPrice: '4.50',
+            quantity: 1,
+            lineTotal: '4.50'
+          }
+        ]
+      }
+    ];
+
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ success: true, data: mockOrders })
+    } as any);
+
+    render(<OrderHistory token={dummyToken} onBrowseCatalog={() => {}} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Order #205')).toBeInTheDocument();
+    });
+
+    expect(screen.getByText('REJECTED')).toBeInTheDocument();
+    expect(screen.getByText(/Store closed early due to power maintenance/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /cancel order/i })).not.toBeInTheDocument();
+  });
 });
