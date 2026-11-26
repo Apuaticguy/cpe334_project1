@@ -25,11 +25,21 @@ export interface OperatorOrder {
   items: OrderItem[];
 }
 
+export interface AdminCatalogItem {
+  id: number;
+  name: string;
+  description: string;
+  unitPrice: string;
+  stockQuantity: number;
+  isActive: boolean;
+}
+
 export interface OperatorDashboardProps {
   token: string;
 }
 
 export default function OperatorDashboard({ token }: OperatorDashboardProps) {
+  const [activeSection, setActiveSection] = useState<'orders' | 'catalog'>('orders');
   const [orders, setOrders] = useState<OperatorOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -37,6 +47,17 @@ export default function OperatorDashboard({ token }: OperatorDashboardProps) {
   const [feedback, setFeedback] = useState<{ orderId: number; type: 'success' | 'danger'; message: string } | null>(null);
   const [expandedOrderId, setExpandedOrderId] = useState<number | null>(null);
   const [filterStatus, setFilterStatus] = useState<'ALL' | 'SUBMITTED' | 'ACCEPTED'>('ALL');
+
+  // F-06 Catalog Administration state
+  const [catalogItems, setCatalogItems] = useState<AdminCatalogItem[]>([]);
+  const [catalogLoading, setCatalogLoading] = useState(false);
+  const [catalogFeedback, setCatalogFeedback] = useState<{ type: 'success' | 'danger'; message: string } | null>(null);
+  const [newName, setNewName] = useState('');
+  const [newDesc, setNewDesc] = useState('');
+  const [newPrice, setNewPrice] = useState('');
+  const [newStock, setNewStock] = useState('');
+  const [submittingCatalog, setSubmittingCatalog] = useState(false);
+  const [editDrafts, setEditDrafts] = useState<Record<number, { unitPrice: string; stockQuantity: string }>>({});
 
   const fetchOrders = async () => {
     setLoading(true);
@@ -60,6 +81,113 @@ export default function OperatorDashboard({ token }: OperatorDashboardProps) {
   useEffect(() => {
     fetchOrders();
   }, [token]);
+
+  const fetchCatalog = async () => {
+    setCatalogLoading(true);
+    setCatalogFeedback(null);
+    try {
+      const res = await fetch('/api/operator/catalog', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        throw new Error(json.error?.message || 'Failed to load catalog items');
+      }
+      const list: AdminCatalogItem[] = json.data || [];
+      setCatalogItems(list);
+      const drafts: Record<number, { unitPrice: string; stockQuantity: string }> = {};
+      list.forEach((item) => {
+        drafts[item.id] = { unitPrice: item.unitPrice, stockQuantity: String(item.stockQuantity) };
+      });
+      setEditDrafts(drafts);
+    } catch (err: any) {
+      setCatalogFeedback({ type: 'danger', message: err.message || 'Failed to load catalog items' });
+    } finally {
+      setCatalogLoading(false);
+    }
+  };
+
+  const handleSwitchSection = (section: 'orders' | 'catalog') => {
+    setActiveSection(section);
+    if (section === 'catalog') {
+      fetchCatalog();
+    }
+  };
+
+  const handleCreateCatalogItem = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCatalogFeedback(null);
+    const parsedPrice = parseFloat(newPrice);
+    const parsedStock = parseInt(newStock, 10);
+
+    if (!newName.trim() || !newDesc.trim() || isNaN(parsedPrice) || parsedPrice <= 0 || isNaN(parsedStock) || parsedStock < 0) {
+      setCatalogFeedback({ type: 'danger', message: 'Please provide valid name, description, unit price > 0, and stock >= 0.' });
+      return;
+    }
+
+    setSubmittingCatalog(true);
+    try {
+      const res = await fetch('/api/operator/catalog', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: newName.trim(),
+          description: newDesc.trim(),
+          unitPrice: parsedPrice,
+          stockQuantity: parsedStock,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        throw new Error(json.error?.message || 'Failed to create catalog item');
+      }
+      const created: AdminCatalogItem = json.data;
+      setCatalogItems((prev) => [...prev, created]);
+      setEditDrafts((prev) => ({
+        ...prev,
+        [created.id]: { unitPrice: created.unitPrice, stockQuantity: String(created.stockQuantity) },
+      }));
+      setNewName('');
+      setNewDesc('');
+      setNewPrice('');
+      setNewStock('');
+      setCatalogFeedback({ type: 'success', message: `Added "${created.name}" to catalog.` });
+    } catch (err: any) {
+      setCatalogFeedback({ type: 'danger', message: err.message || 'Error creating catalog item' });
+    } finally {
+      setSubmittingCatalog(false);
+    }
+  };
+
+  const handleUpdateCatalogItem = async (itemId: number, updates: { unitPrice?: number; stockQuantity?: number; isActive?: boolean }) => {
+    setCatalogFeedback(null);
+    try {
+      const res = await fetch(`/api/operator/catalog/${itemId}`, {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updates),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        throw new Error(json.error?.message || 'Failed to update catalog item');
+      }
+      const updated: AdminCatalogItem = json.data;
+      setCatalogItems((prev) => prev.map((i) => (i.id === itemId ? updated : i)));
+      setEditDrafts((prev) => ({
+        ...prev,
+        [itemId]: { unitPrice: updated.unitPrice, stockQuantity: String(updated.stockQuantity) },
+      }));
+      setCatalogFeedback({ type: 'success', message: `Updated "${updated.name}".` });
+    } catch (err: any) {
+      setCatalogFeedback({ type: 'danger', message: err.message || 'Error updating catalog item' });
+    }
+  };
 
   const handleAcceptOrder = async (orderId: number) => {
     setActionLoadingId(orderId);
@@ -168,6 +296,200 @@ export default function OperatorDashboard({ token }: OperatorDashboardProps) {
 
   return (
     <div className="my-4">
+      {/* Top Operator Navigation Tabs */}
+      <div className="d-flex gap-2 mb-3 border-bottom pb-2">
+        <button
+          type="button"
+          className={`btn btn-sm fw-semibold ${activeSection === 'orders' ? 'btn-primary' : 'btn-outline-secondary'}`}
+          onClick={() => handleSwitchSection('orders')}
+        >
+          <i className="bi bi-inbox-fill me-1"></i> Order Queue
+        </button>
+        <button
+          type="button"
+          className={`btn btn-sm fw-semibold ${activeSection === 'catalog' ? 'btn-primary' : 'btn-outline-secondary'}`}
+          onClick={() => handleSwitchSection('catalog')}
+        >
+          <i className="bi bi-box-seam me-1"></i> Manage Catalog
+        </button>
+      </div>
+
+      {activeSection === 'catalog' ? (
+        <div>
+          <div className="d-flex justify-content-between align-items-center mb-3">
+            <div>
+              <h3 className="h4 fw-bold mb-1">
+                <i className="bi bi-box-seam me-2 text-primary"></i>Catalog &amp; Inventory Administration
+              </h3>
+              <p className="text-muted small mb-0">
+                Create catalog items, adjust pricing, and restock inventory without modifying historical order snapshots.
+              </p>
+            </div>
+            <button type="button" className="btn btn-outline-secondary btn-sm" onClick={fetchCatalog}>
+              <i className="bi bi-arrow-clockwise me-1"></i> Refresh Catalog
+            </button>
+          </div>
+
+          {catalogFeedback && (
+            <div className={`alert alert-${catalogFeedback.type} py-2 small`} role="alert">
+              {catalogFeedback.message}
+            </div>
+          )}
+
+          {/* Create New Item Form */}
+          <div className="card border-0 shadow-sm mb-4">
+            <div className="card-header bg-white fw-semibold py-2">Add New Catalog Item</div>
+            <div className="card-body">
+              <form onSubmit={handleCreateCatalogItem} className="row g-2 align-items-end">
+                <div className="col-12 col-md-3">
+                  <label htmlFor="cat-item-name" className="form-label small fw-semibold mb-1">Item Name</label>
+                  <input
+                    id="cat-item-name"
+                    type="text"
+                    className="form-control form-control-sm"
+                    value={newName}
+                    onChange={(e) => setNewName(e.target.value)}
+                    placeholder="e.g. Thai Iced Tea"
+                    required
+                  />
+                </div>
+                <div className="col-12 col-md-4">
+                  <label htmlFor="cat-item-desc" className="form-label small fw-semibold mb-1">Description</label>
+                  <input
+                    id="cat-item-desc"
+                    type="text"
+                    className="form-control form-control-sm"
+                    value={newDesc}
+                    onChange={(e) => setNewDesc(e.target.value)}
+                    placeholder="Freshly brewed tea"
+                    required
+                  />
+                </div>
+                <div className="col-6 col-md-2">
+                  <label htmlFor="cat-item-price" className="form-label small fw-semibold mb-1">Unit Price ($)</label>
+                  <input
+                    id="cat-item-price"
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    className="form-control form-control-sm"
+                    value={newPrice}
+                    onChange={(e) => setNewPrice(e.target.value)}
+                    placeholder="4.50"
+                    required
+                  />
+                </div>
+                <div className="col-6 col-md-1">
+                  <label htmlFor="cat-item-stock" className="form-label small fw-semibold mb-1">Stock Quantity</label>
+                  <input
+                    id="cat-item-stock"
+                    type="number"
+                    min="0"
+                    className="form-control form-control-sm"
+                    value={newStock}
+                    onChange={(e) => setNewStock(e.target.value)}
+                    placeholder="20"
+                    required
+                  />
+                </div>
+                <div className="col-12 col-md-2">
+                  <button type="submit" className="btn btn-primary btn-sm w-100 fw-semibold" disabled={submittingCatalog}>
+                    {submittingCatalog ? 'Adding...' : 'Add Catalog Item'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+
+          {/* Inventory List */}
+          <div className="card border-0 shadow-sm overflow-hidden">
+            <div className="table-responsive">
+              <table className="table table-hover align-middle mb-0">
+                <thead className="table-light">
+                  <tr>
+                    <th>ID</th>
+                    <th>Item</th>
+                    <th style={{ width: '130px' }}>Price ($)</th>
+                    <th style={{ width: '120px' }}>Stock</th>
+                    <th className="text-center">Status</th>
+                    <th className="text-end">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {catalogLoading ? (
+                    <tr><td colSpan={6} className="text-center py-4 text-muted">Loading catalog...</td></tr>
+                  ) : catalogItems.map((item) => {
+                    const draft = editDrafts[item.id] || { unitPrice: item.unitPrice, stockQuantity: String(item.stockQuantity) };
+                    return (
+                      <tr key={item.id}>
+                        <td className="fw-bold">#{item.id}</td>
+                        <td>
+                          <div className="fw-semibold">{item.name}</div>
+                          <div className="text-muted small">{item.description}</div>
+                        </td>
+                        <td>
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0.01"
+                            className="form-control form-control-sm"
+                            aria-label={`Price for ${item.name}`}
+                            value={draft.unitPrice}
+                            onChange={(e) => setEditDrafts((prev) => ({
+                              ...prev,
+                              [item.id]: { ...draft, unitPrice: e.target.value },
+                            }))}
+                          />
+                        </td>
+                        <td>
+                          <input
+                            type="number"
+                            min="0"
+                            className="form-control form-control-sm"
+                            aria-label={`Stock for ${item.name}`}
+                            value={draft.stockQuantity}
+                            onChange={(e) => setEditDrafts((prev) => ({
+                              ...prev,
+                              [item.id]: { ...draft, stockQuantity: e.target.value },
+                            }))}
+                          />
+                        </td>
+                        <td className="text-center">
+                          <span className={`badge ${item.isActive ? 'bg-success' : 'bg-secondary'}`}>
+                            {item.isActive ? 'ACTIVE' : 'INACTIVE'}
+                          </span>
+                        </td>
+                        <td className="text-end">
+                          <div className="d-flex justify-content-end gap-2">
+                            <button
+                              type="button"
+                              className="btn btn-outline-primary btn-sm"
+                              onClick={() => handleUpdateCatalogItem(item.id, {
+                                unitPrice: parseFloat(draft.unitPrice),
+                                stockQuantity: parseInt(draft.stockQuantity, 10),
+                              })}
+                            >
+                              Save
+                            </button>
+                            <button
+                              type="button"
+                              className={`btn btn-sm ${item.isActive ? 'btn-outline-warning' : 'btn-outline-success'}`}
+                              onClick={() => handleUpdateCatalogItem(item.id, { isActive: !item.isActive })}
+                            >
+                              {item.isActive ? 'Deactivate' : 'Activate'}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <>
       {/* Header and Controls */}
       <div className="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
         <div>
@@ -398,6 +720,8 @@ export default function OperatorDashboard({ token }: OperatorDashboardProps) {
             );
           })()}
         </div>
+      )}
+        </>
       )}
     </div>
   );

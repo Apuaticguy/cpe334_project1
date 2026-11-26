@@ -1,5 +1,5 @@
 import { Router, Response } from 'express';
-import { Role, OrderStatus } from '@prisma/client';
+import { Prisma, Role, OrderStatus } from '@prisma/client';
 import { prisma } from '../prisma.js';
 import { requireAuth, requireRole, AuthenticatedRequest } from '../middleware/auth.js';
 
@@ -7,6 +7,24 @@ export const operatorRouter = Router();
 
 // Apply operator guard to all operator routes
 operatorRouter.use(requireAuth, requireRole(Role.OPERATOR));
+
+function formatCatalogItem(item: {
+  id: number;
+  name: string;
+  description: string;
+  unitPrice: Prisma.Decimal;
+  stockQuantity: number;
+  isActive: boolean;
+}) {
+  return {
+    id: item.id,
+    name: item.name,
+    description: item.description,
+    unitPrice: Number(item.unitPrice).toFixed(2),
+    stockQuantity: item.stockQuantity,
+    isActive: item.isActive,
+  };
+}
 
 // GET /api/operator/orders - Retrieve all incoming orders for the operator queue
 operatorRouter.get('/orders', async (_req: AuthenticatedRequest, res: Response) => {
@@ -150,6 +168,181 @@ operatorRouter.patch('/orders/:id/accept', async (req: AuthenticatedRequest, res
     res.status(500).json({
       success: false,
       error: { code: 'INTERNAL_ERROR', message: 'Failed to accept order' },
+    });
+  }
+});
+
+// GET /api/operator/catalog - List all catalog items (active & inactive) for operators (F-06)
+operatorRouter.get('/catalog', async (_req: AuthenticatedRequest, res: Response) => {
+  try {
+    const items = await prisma.catalogItem.findMany({
+      orderBy: { id: 'asc' },
+    });
+    res.status(200).json({
+      success: true,
+      data: items.map(formatCatalogItem),
+    });
+  } catch (error) {
+    console.error('Error fetching operator catalog:', error);
+    res.status(500).json({
+      success: false,
+      error: { code: 'INTERNAL_ERROR', message: 'Failed to retrieve operator catalog' },
+    });
+  }
+});
+
+// POST /api/operator/catalog - Create a new catalog item (F-06 / AC-S2-01, AC-S2-03)
+operatorRouter.post('/catalog', async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { name, description, unitPrice, stockQuantity, isActive } = req.body;
+
+    if (
+      typeof name !== 'string' ||
+      name.trim().length === 0 ||
+      typeof description !== 'string' ||
+      description.trim().length === 0 ||
+      typeof unitPrice !== 'number' ||
+      !Number.isFinite(unitPrice) ||
+      unitPrice <= 0 ||
+      typeof stockQuantity !== 'number' ||
+      !Number.isInteger(stockQuantity) ||
+      stockQuantity < 0 ||
+      (isActive !== undefined && typeof isActive !== 'boolean')
+    ) {
+      res.status(400).json({
+        success: false,
+        error: {
+          code: 'INVALID_INPUT',
+          message: 'Valid name, description, unitPrice > 0, and integer stockQuantity >= 0 are required',
+        },
+      });
+      return;
+    }
+
+    const created = await prisma.catalogItem.create({
+      data: {
+        name: name.trim(),
+        description: description.trim(),
+        unitPrice: new Prisma.Decimal(unitPrice.toFixed(2)),
+        stockQuantity,
+        isActive: isActive ?? true,
+      },
+    });
+
+    res.status(201).json({
+      success: true,
+      data: formatCatalogItem(created),
+    });
+  } catch (error) {
+    console.error('Error creating catalog item:', error);
+    res.status(500).json({
+      success: false,
+      error: { code: 'INTERNAL_ERROR', message: 'Failed to create catalog item' },
+    });
+  }
+});
+
+// PATCH /api/operator/catalog/:id - Update existing catalog item without altering order snapshots (F-06 / AC-S2-02)
+operatorRouter.patch('/catalog/:id', async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const itemId = parseInt(req.params.id, 10);
+    if (isNaN(itemId) || itemId <= 0) {
+      res.status(400).json({
+        success: false,
+        error: { code: 'INVALID_ID', message: 'Invalid catalog item ID' },
+      });
+      return;
+    }
+
+    const existing = await prisma.catalogItem.findUnique({ where: { id: itemId } });
+    if (!existing) {
+      res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message: `Catalog item #${itemId} not found` },
+      });
+      return;
+    }
+
+    const { name, description, unitPrice, stockQuantity, isActive } = req.body;
+    const updateData: Prisma.CatalogItemUpdateInput = {};
+
+    if (name !== undefined) {
+      if (typeof name !== 'string' || name.trim().length === 0) {
+        res.status(400).json({
+          success: false,
+          error: { code: 'INVALID_INPUT', message: 'Item name cannot be empty' },
+        });
+        return;
+      }
+      updateData.name = name.trim();
+    }
+
+    if (description !== undefined) {
+      if (typeof description !== 'string' || description.trim().length === 0) {
+        res.status(400).json({
+          success: false,
+          error: { code: 'INVALID_INPUT', message: 'Item description cannot be empty' },
+        });
+        return;
+      }
+      updateData.description = description.trim();
+    }
+
+    if (unitPrice !== undefined) {
+      if (typeof unitPrice !== 'number' || !Number.isFinite(unitPrice) || unitPrice <= 0) {
+        res.status(400).json({
+          success: false,
+          error: { code: 'INVALID_INPUT', message: 'Unit price must be greater than 0' },
+        });
+        return;
+      }
+      updateData.unitPrice = new Prisma.Decimal(unitPrice.toFixed(2));
+    }
+
+    if (stockQuantity !== undefined) {
+      if (typeof stockQuantity !== 'number' || !Number.isInteger(stockQuantity) || stockQuantity < 0) {
+        res.status(400).json({
+          success: false,
+          error: { code: 'INVALID_INPUT', message: 'Stock quantity must be an integer >= 0' },
+        });
+        return;
+      }
+      updateData.stockQuantity = stockQuantity;
+    }
+
+    if (isActive !== undefined) {
+      if (typeof isActive !== 'boolean') {
+        res.status(400).json({
+          success: false,
+          error: { code: 'INVALID_INPUT', message: 'isActive must be a boolean' },
+        });
+        return;
+      }
+      updateData.isActive = isActive;
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      res.status(400).json({
+        success: false,
+        error: { code: 'INVALID_INPUT', message: 'At least one valid field must be provided for update' },
+      });
+      return;
+    }
+
+    const updated = await prisma.catalogItem.update({
+      where: { id: itemId },
+      data: updateData,
+    });
+
+    res.status(200).json({
+      success: true,
+      data: formatCatalogItem(updated),
+    });
+  } catch (error) {
+    console.error('Error updating catalog item:', error);
+    res.status(500).json({
+      success: false,
+      error: { code: 'INTERNAL_ERROR', message: 'Failed to update catalog item' },
     });
   }
 });
