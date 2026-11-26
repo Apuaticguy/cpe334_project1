@@ -283,4 +283,65 @@ describe('OperatorDashboard Component Tests (Feature 4)', () => {
       expect.objectContaining({ method: 'POST' })
     );
   });
+
+  // TEST-S2-13 (F-07) / AC-S2-05: Operator Reject Order with mandatory reason
+  it('[TEST-S2-13 / AC-S2-05] allows operator to reject a SUBMITTED order with reason via PATCH /reject and renders REJECTED', async () => {
+    const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      if (url === '/api/operator/orders') {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ success: true, data: mockOrders }),
+        });
+      }
+      if (url === '/api/operator/orders/101/reject' && init?.method === 'PATCH') {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            success: true,
+            data: {
+              ...mockOrders[0],
+              status: 'REJECTED',
+              rejectionReason: 'Out of matcha powder',
+              updatedAt: '2026-11-26T10:10:00.000Z',
+            },
+          }),
+        });
+      }
+      return Promise.reject(new Error(`Unexpected URL: ${url}`));
+    });
+    global.fetch = fetchMock as any;
+
+    render(<OperatorDashboard token={dummyToken} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('#101')).toBeInTheDocument();
+    });
+
+    const rejectBtn = screen.getByRole('button', { name: /reject order/i });
+    fireEvent.click(rejectBtn);
+
+    const reasonInput = await screen.findByLabelText(/rejection reason/i);
+    fireEvent.change(reasonInput, { target: { value: 'Out of matcha powder' } });
+
+    const confirmRejectBtn = screen.getByRole('button', { name: /confirm reject/i });
+    fireEvent.click(confirmRejectBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText('REJECTED')).toBeInTheDocument();
+      expect(screen.getByText(/Out of matcha powder/i)).toBeInTheDocument();
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/operator/orders/101/reject',
+      expect.objectContaining({
+        method: 'PATCH',
+        headers: expect.objectContaining({
+          Authorization: `Bearer ${dummyToken}`,
+          'Content-Type': 'application/json',
+        }),
+        body: JSON.stringify({ reason: 'Out of matcha powder' }),
+      })
+    );
+  });
 });

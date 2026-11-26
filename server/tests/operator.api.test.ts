@@ -129,4 +129,162 @@ describe('Feature 4: Operator Order Queue & State Acceptance API Tests', () => {
     const patchRes = await request(app).patch(`/api/operator/orders/${testOrderId}/accept`);
     expect(patchRes.status).toBe(401);
   });
+
+  // ---------------------------------------------------------------------------
+  // Sprint 2 F-07 (Issue #38): Operator Order Rejection & Atomic Stock Restore
+  // ---------------------------------------------------------------------------
+
+  // TEST-S2-05 / AC-S2-05: Operator rejects SUBMITTED order with reason -> 200 REJECTED + stock restored
+  it('[TEST-S2-05 / AC-S2-05] PATCH /api/operator/orders/:id/reject rejects SUBMITTED order with reason and restores stock atomically', async () => {
+    const item = await prisma.catalogItem.findFirst({ where: { isActive: true, stockQuantity: { gte: 5 } } });
+    if (!item) throw new Error('Seeded catalog item with sufficient stock not found');
+    const initialStock = item.stockQuantity;
+    const qty = 2;
+
+    const createRes = await request(app)
+      .post('/api/orders')
+      .set('Authorization', `Bearer ${customerToken}`)
+      .send({ items: [{ catalogItemId: item.id, quantity: qty }] });
+    expect(createRes.status).toBe(201);
+    const orderId = createRes.body.data.id;
+
+    expect((await prisma.catalogItem.findUnique({ where: { id: item.id } }))!.stockQuantity).toBe(initialStock - qty);
+
+    const rejectRes = await request(app)
+      .patch(`/api/operator/orders/${orderId}/reject`)
+      .set('Authorization', `Bearer ${operatorToken}`)
+      .send({ reason: '  Out of cups  ' });
+
+    expect(rejectRes.status).toBe(200);
+    expect(rejectRes.body.success).toBe(true);
+    expect(rejectRes.body.data.id).toBe(orderId);
+    expect(rejectRes.body.data.status).toBe(OrderStatus.REJECTED);
+    expect(rejectRes.body.data.rejectionReason).toBe('Out of cups');
+
+    const dbOrder = await prisma.order.findUnique({ where: { id: orderId } });
+    expect(dbOrder!.status).toBe(OrderStatus.REJECTED);
+    expect(dbOrder!.rejectionReason).toBe('Out of cups');
+
+    const restoredStock = (await prisma.catalogItem.findUnique({ where: { id: item.id } }))!.stockQuantity;
+    expect(restoredStock).toBe(initialStock);
+
+    // Customer GET /api/orders/:id reflects rejectionReason
+    const detailRes = await request(app)
+      .get(`/api/orders/${orderId}`)
+      .set('Authorization', `Bearer ${customerToken}`);
+    expect(detailRes.status).toBe(200);
+    expect(detailRes.body.data.status).toBe(OrderStatus.REJECTED);
+    expect(detailRes.body.data.rejectionReason).toBe('Out of cups');
+
+    // Operator cannot accept a REJECTED order (BR-06 -> 409)
+    const acceptRejectedRes = await request(app)
+      .patch(`/api/operator/orders/${orderId}/accept`)
+      .set('Authorization', `Bearer ${operatorToken}`);
+    expect(acceptRejectedRes.status).toBe(409);
+  });
+
+  // TEST-S2-06 / AC-S2-06: Missing or whitespace-only reason -> 400 INVALID_INPUT
+  it('[TEST-S2-06 / AC-S2-06] PATCH /api/operator/orders/:id/reject rejects blank or missing reason with 400 INVALID_INPUT', async () => {
+    const item = await prisma.catalogItem.findFirst({ where: { isActive: true, stockQuantity: { gte: 5 } } });
+    if (!item) throw new Error('Seeded catalog item with sufficient stock not found');
+
+    const createRes = await request(app)
+      .post('/api/orders')
+      .set('Authorization', `Bearer ${customerToken}`)
+      .send({ items: [{ catalogItemId: item.id, quantity: 1 }] });
+    const orderId = createRes.body.data.id;
+    const stockBefore = (await prisma.catalogItem.findUnique({ where: { id: item.id } }))!.stockQuantity;
+
+    const blankRes = await request(app)
+      .patch(`/api/operator/orders/${orderId}/reject`)
+      .set('Authorization', `Bearer ${operatorToken}`)
+      .send({ reason: '   ' });
+
+    expect(blankRes.status).toBe(400);
+    expect(blankRes.body.success).toBe(false);
+    expect(blankRes.body.error.code).toBe('INVALID_INPUT');
+
+    const missingRes = await request(app)
+      .patch(`/api/operator/orders/${orderId}/reject`)
+      .set('Authorization', `Bearer ${operatorToken}`)
+      .send({});
+
+    expect(missingRes.status).toBe(400);
+    expect(missingRes.body.success).toBe(false);
+    expect(missingRes.body.error.code).toBe('INVALID_INPUT');
+
+    const dbOrder = await prisma.order.findUnique({ where: { id: orderId } });
+    expect(dbOrder!.status).toBe(OrderStatus.SUBMITTED);
+    expect((await prisma.catalogItem.findUnique({ where: { id: item.id } }))!.stockQuantity).toBe(stockBefore);
+  });
+
+  // TEST-S2-07 / AC-S2-07: Non-SUBMITTED order (ACCEPTED, CANCELLED, REJECTED) -> 409 STATE_CONFLICT
+  it('[TEST-S2-07 / AC-S2-07] PATCH /api/operator/orders/:id/reject returns 409 STATE_CONFLICT for ACCEPTED, CANCELLED, or REJECTED orders', async () => {
+    const item = await prisma.catalogItem.findFirst({ where: { isActive: true, stockQuantity: { gte: 5 } } });
+    if (!item) throw new Error('Seeded catalog item with sufficient stock not found');
+
+    // 1. Try rejecting already ACCEPTED testOrderId
+    const stockBeforeAccepted = (await prisma.catalogItem.findUnique({ where: { id: item.id } }))!.stockQuantity;
+    const acceptedRes = await request(app)
+      .patch(`/api/operator/orders/${testOrderId}/reject`)
+      .set('Authorization', `Bearer ${operatorToken}`)
+      .send({ reason: 'Cannot reject accepted' });
+    expect(acceptedRes.status).toBe(409);
+    expect(acceptedRes.body.error.code).toBe('STATE_CONFLICT');
+    expect((await prisma.catalogItem.findUnique({ where: { id: item.id } }))!.stockQuantity).toBe(stockBeforeAccepted);
+
+    // 2. Create order, customer cancels, then operator tries to reject -> 409
+    const orderRes = await request(app)
+      .post('/api/orders')
+      .set('Authorization', `Bearer ${customerToken}`)
+      .send({ items: [{ catalogItemId: item.id, quantity: 1 }] });
+    const cancelledId = orderRes.body.data.id;
+
+    await request(app)
+      .patch(`/api/orders/${cancelledId}/cancel`)
+      .set('Authorization', `Bearer ${customerToken}`);
+
+    const stockAfterCancel = (await prisma.catalogItem.findUnique({ where: { id: item.id } }))!.stockQuantity;
+    const rejectCancelledRes = await request(app)
+      .patch(`/api/operator/orders/${cancelledId}/reject`)
+      .set('Authorization', `Bearer ${operatorToken}`)
+      .send({ reason: 'Late reject' });
+
+    expect(rejectCancelledRes.status).toBe(409);
+    expect(rejectCancelledRes.body.error.code).toBe('STATE_CONFLICT');
+    expect((await prisma.catalogItem.findUnique({ where: { id: item.id } }))!.stockQuantity).toBe(stockAfterCancel);
+  });
+
+  // TEST-S2-08 / AC-S2-08: CUSTOMER -> 403, unauthenticated -> 401, unknown ID -> 404
+  it('[TEST-S2-08 / AC-S2-08] PATCH /api/operator/orders/:id/reject enforces OPERATOR role (403), auth (401), and 404', async () => {
+    const item = await prisma.catalogItem.findFirst({ where: { isActive: true, stockQuantity: { gte: 5 } } });
+    if (!item) throw new Error('Seeded catalog item with sufficient stock not found');
+
+    const orderRes = await request(app)
+      .post('/api/orders')
+      .set('Authorization', `Bearer ${customerToken}`)
+      .send({ items: [{ catalogItemId: item.id, quantity: 1 }] });
+    const orderId = orderRes.body.data.id;
+
+    const unauthRes = await request(app)
+      .patch(`/api/operator/orders/${orderId}/reject`)
+      .send({ reason: 'No auth' });
+    expect(unauthRes.status).toBe(401);
+
+    const custRes = await request(app)
+      .patch(`/api/operator/orders/${orderId}/reject`)
+      .set('Authorization', `Bearer ${customerToken}`)
+      .send({ reason: 'Customer forbidden' });
+    expect(custRes.status).toBe(403);
+    expect(custRes.body.success).toBe(false);
+
+    const notFoundRes = await request(app)
+      .patch('/api/operator/orders/999999/reject')
+      .set('Authorization', `Bearer ${operatorToken}`)
+      .send({ reason: 'Missing order' });
+    expect(notFoundRes.status).toBe(404);
+
+    const dbOrder = await prisma.order.findUnique({ where: { id: orderId } });
+    expect(dbOrder!.status).toBe(OrderStatus.SUBMITTED);
+  });
 });

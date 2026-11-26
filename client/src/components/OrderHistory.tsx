@@ -11,7 +11,8 @@ interface OrderItem {
 
 interface OrderRecord {
   id: number;
-  status: 'SUBMITTED' | 'ACCEPTED' | 'CANCELLED';
+  status: 'SUBMITTED' | 'ACCEPTED' | 'CANCELLED' | 'REJECTED';
+  rejectionReason?: string | null;
   totalAmount: string;
   createdAt: string;
   updatedAt: string;
@@ -98,6 +99,8 @@ export default function OrderHistory({ token, onBrowseCatalog }: OrderHistoryPro
         return <span className="badge bg-success"><i className="bi bi-check-circle me-1"></i>ACCEPTED</span>;
       case 'CANCELLED':
         return <span className="badge bg-secondary"><i className="bi bi-x-circle me-1"></i>CANCELLED</span>;
+      case 'REJECTED':
+        return <span className="badge bg-danger"><i className="bi bi-x-octagon me-1"></i>REJECTED</span>;
       default:
         return <span className="badge bg-info">{status}</span>;
     }
@@ -233,6 +236,13 @@ export default function OrderHistory({ token, onBrowseCatalog }: OrderHistoryPro
                   </button>
                 </div>
               </div>
+
+              {order.status === 'REJECTED' && order.rejectionReason && (
+                <div className="px-3 py-2 bg-danger bg-opacity-10 border-top border-danger border-opacity-25 text-danger small">
+                  <i className="bi bi-info-circle-fill me-1"></i>
+                  <strong>Rejection Reason:</strong> {order.rejectionReason}
+                </div>
+              )}
 
               {isExpanded && (
                 <div className="card-body p-3 bg-light border-top">

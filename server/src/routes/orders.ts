@@ -184,6 +184,7 @@ ordersRouter.get('/my-orders', requireAuth, async (req: AuthenticatedRequest, re
     const data = orders.map((order) => ({
       id: order.id,
       status: order.status,
+      rejectionReason: order.rejectionReason,
       totalAmount: Number(order.totalAmount).toFixed(2),
       createdAt: order.createdAt.toISOString(),
       updatedAt: order.updatedAt.toISOString(),
@@ -262,6 +263,7 @@ ordersRouter.get('/:id', requireAuth, async (req: AuthenticatedRequest, res: Res
         id: order.id,
         userId: order.userId,
         status: order.status,
+        rejectionReason: order.rejectionReason,
         totalAmount: Number(order.totalAmount).toFixed(2),
         createdAt: order.createdAt.toISOString(),
         updatedAt: order.updatedAt.toISOString(),
