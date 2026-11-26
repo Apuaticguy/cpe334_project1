@@ -287,4 +287,88 @@ describe('Feature 4: Operator Order Queue & State Acceptance API Tests', () => {
     const dbOrder = await prisma.order.findUnique({ where: { id: orderId } });
     expect(dbOrder!.status).toBe(OrderStatus.SUBMITTED);
   });
+
+  // ============================================================================
+  // Sprint 3 Feature F-09: Order Fulfillment Lifecycle (ACCEPTED -> READY_FOR_PICKUP -> COMPLETED)
+  // ============================================================================
+
+  it('[TEST-S3-01 & TEST-S3-02 / AC-S3-01, AC-S3-02] transitions ACCEPTED -> READY_FOR_PICKUP -> COMPLETED and records timestamps', async () => {
+    const item = await prisma.catalogItem.findFirst({ where: { isActive: true, stockQuantity: { gte: 5 } } });
+    if (!item) throw new Error('Seeded catalog item with sufficient stock not found');
+
+    // Create and accept an order
+    const orderRes = await request(app)
+      .post('/api/orders')
+      .set('Authorization', `Bearer ${customerToken}`)
+      .send({ items: [{ catalogItemId: item.id, quantity: 1 }] });
+    expect(orderRes.status).toBe(201);
+    const orderId = orderRes.body.data.id;
+
+    const acceptRes = await request(app)
+      .patch(`/api/operator/orders/${orderId}/accept`)
+      .set('Authorization', `Bearer ${operatorToken}`);
+    expect(acceptRes.status).toBe(200);
+    expect(acceptRes.body.data.status).toBe('ACCEPTED');
+
+    // TEST-S3-01: ACCEPTED -> READY_FOR_PICKUP
+    const readyRes = await request(app)
+      .patch(`/api/operator/orders/${orderId}/ready`)
+      .set('Authorization', `Bearer ${operatorToken}`);
+    expect(readyRes.status).toBe(200);
+    expect(readyRes.body.success).toBe(true);
+    expect(readyRes.body.data.status).toBe('READY_FOR_PICKUP');
+    expect(readyRes.body.data.readyAt).toBeTruthy();
+
+    // TEST-S3-02: READY_FOR_PICKUP -> COMPLETED
+    const completeRes = await request(app)
+      .patch(`/api/operator/orders/${orderId}/complete`)
+      .set('Authorization', `Bearer ${operatorToken}`);
+    expect(completeRes.status).toBe(200);
+    expect(completeRes.body.success).toBe(true);
+    expect(completeRes.body.data.status).toBe('COMPLETED');
+    expect(completeRes.body.data.readyAt).toBeTruthy();
+    expect(completeRes.body.data.completedAt).toBeTruthy();
+
+    // Verify customer sees READY/COMPLETED timestamps via GET /api/orders/:id
+    const custOrder = await request(app)
+      .get(`/api/orders/${orderId}`)
+      .set('Authorization', `Bearer ${customerToken}`);
+    expect(custOrder.status).toBe(200);
+    expect(custOrder.body.data.status).toBe('COMPLETED');
+    expect(custOrder.body.data.completedAt).toBeTruthy();
+  });
+
+  it('[TEST-S3-03 / AC-S3-03] rejects skipped fulfillment state transitions (409) and CUSTOMER calls (403)', async () => {
+    const item = await prisma.catalogItem.findFirst({ where: { isActive: true, stockQuantity: { gte: 5 } } });
+    if (!item) throw new Error('Seeded catalog item with sufficient stock not found');
+
+    const orderRes = await request(app)
+      .post('/api/orders')
+      .set('Authorization', `Bearer ${customerToken}`)
+      .send({ items: [{ catalogItemId: item.id, quantity: 1 }] });
+    const submittedOrderId = orderRes.body.data.id;
+
+    // Cannot jump SUBMITTED -> READY_FOR_PICKUP (409)
+    const skipReady = await request(app)
+      .patch(`/api/operator/orders/${submittedOrderId}/ready`)
+      .set('Authorization', `Bearer ${operatorToken}`);
+    expect(skipReady.status).toBe(409);
+
+    // Cannot jump SUBMITTED -> COMPLETED (409)
+    const skipComplete = await request(app)
+      .patch(`/api/operator/orders/${submittedOrderId}/complete`)
+      .set('Authorization', `Bearer ${operatorToken}`);
+    expect(skipComplete.status).toBe(409);
+
+    // CUSTOMER forbidden from /ready and /complete (403)
+    const custReady = await request(app)
+      .patch(`/api/operator/orders/${submittedOrderId}/ready`)
+      .set('Authorization', `Bearer ${customerToken}`);
+    expect(custReady.status).toBe(403);
+
+    const custComplete = await request(app)
+      .patch(`/api/operator/orders/${submittedOrderId}/complete`)
+      .set('Authorization', `Bearer ${customerToken}`);
+    expect(custComplete.status).toBe(403);
+  });
 });
