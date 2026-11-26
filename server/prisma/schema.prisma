@@ -19,6 +19,12 @@ enum OrderStatus {
   REJECTED
 }
 
+enum PaymentStatus {
+  UNPAID
+  PAID
+  REFUNDED
+}
+
 model User {
   id           Int      @id @default(autoincrement())
   email        String   @unique
@@ -47,13 +53,16 @@ model CatalogItem {
 }
 
 model Order {
-  id              Int         @id @default(autoincrement())
-  userId          Int
-  status          OrderStatus @default(SUBMITTED)
-  rejectionReason String?
-  totalAmount     Decimal     @db.Decimal(10, 2)
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
+  id               Int           @id @default(autoincrement())
+  userId           Int
+  status           OrderStatus   @default(SUBMITTED)
+  paymentStatus    PaymentStatus @default(UNPAID)
+  paymentReference String?
+  paidAt           DateTime?
+  rejectionReason  String?
+  totalAmount      Decimal       @db.Decimal(10, 2)
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
 
   user        User        @relation(fields: [userId], references: [id])
   items       OrderItem[]
