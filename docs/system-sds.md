@@ -1,9 +1,9 @@
 # System Software Design Specification (System-Level SDS) - QuickOrder
 
-**Document Version:** 1.0.0  
+**Document Version:** 2.0.0 (Deliverable 2 — Sprint 2 & Sprint 3 Expansion)  
 **Project:** QuickOrder (Theme 4: E-Commerce or Ordering System)  
-**Authors:** Panyakorn Lohaviboonsap (67070503424), Ivan (Apuaticguy)  
-**Status:** Baseline Draft (Pre-Sprint 1)
+**Authors:** Panyakorn Lohaviboonsap (67070503424), Ivan Luwongsupakit (`@Apuaticguy`)  
+**Status:** Deliverable 2 System Architecture (Issue #36)
 
 ---
 
@@ -86,7 +86,13 @@ erDiagram
     ORDER {
         int id PK
         int userId FK
-        string status "SUBMITTED | ACCEPTED | CANCELLED"
+        string status "SUBMITTED | ACCEPTED | CANCELLED | REJECTED | READY_FOR_PICKUP | COMPLETED"
+        string paymentStatus "UNPAID | PAID | REFUNDED"
+        string paymentReference
+        datetime paidAt
+        string rejectionReason
+        datetime readyAt
+        datetime completedAt
         decimal totalAmount
         datetime createdAt
         datetime updatedAt
@@ -125,7 +131,13 @@ erDiagram
 #### 3. `Order`
 * `id` (Int, Primary Key, autoincrement)
 * `userId` (Int, Foreign Key to `User.id`)
-* `status` (Enum: `SUBMITTED`, `ACCEPTED`, `CANCELLED`; default `SUBMITTED`)
+* `status` (Enum: `SUBMITTED`, `ACCEPTED`, `CANCELLED`, `REJECTED`, `READY_FOR_PICKUP`, `COMPLETED`; default `SUBMITTED`)
+* `paymentStatus` (Enum: `UNPAID`, `PAID`, `REFUNDED`; default `UNPAID`) *(Sprint 2 F-08)*
+* `paymentReference` (String?, simulated receipt token) *(Sprint 2 F-08)*
+* `paidAt` (DateTime?, timestamp of simulated payment) *(Sprint 2 F-08)*
+* `rejectionReason` (String?, mandatory reason upon operator rejection) *(Sprint 2 F-07)*
+* `readyAt` (DateTime?, timestamp when marked ready for pickup) *(Sprint 3 F-09)*
+* `completedAt` (DateTime?, timestamp when pickup completed) *(Sprint 3 F-09)*
 * `totalAmount` (Decimal, 10, 2 - Authoritative sum calculated by server)
 * `createdAt` (DateTime, default `now()`)
 * `updatedAt` (DateTime, auto-updated)
@@ -142,9 +154,9 @@ erDiagram
 ### 2.3 Database Setup, Migrations & Idempotent Seed Data
 * Managed via Prisma ORM (`prisma migrate dev`).
 * A reproducible seed script (`server/prisma/seed.ts`) executes idempotently using `upsert`.
-* Seeded default accounts:
-  - **Customer:** `customer1@example.com` / `Password123!` (Role: `CUSTOMER`)
-  - **Operator:** `operator1@example.com` / `Password123!` (Role: `OPERATOR`)
+* Seeded default accounts (passwords injected via `SECRET_DEMO_PASS` / `.env` and never committed):
+  - **Customer:** `customer1@example.com` (Role: `CUSTOMER`) &amp; `customer2@example.com` (Role: `CUSTOMER`)
+  - **Operator:** `operator1@example.com` (Role: `OPERATOR`)
 * Seeded catalog items:
   - Iced Matcha Latte ($4.50)
   - Artisan Croissant ($3.25)
@@ -203,6 +215,11 @@ erDiagram
 | **View Order Detail** | `GET /api/orders/:id` | 401 | Conditional | Allowed | 403 if Customer $\neq$ `order.userId` |
 | **View Operator Queue** | `GET /api/operator/orders` | 401 | 403 | Allowed | Operator only |
 | **Accept Order** | `PATCH /api/operator/orders/:id/accept` | 401 | 403 | Allowed | Operator only |
+| **Cancel Order (Lab 7 / F-07)** | `PATCH /api/orders/:id/cancel` | 401 | Conditional | 403 | 403 if Customer $\neq$ `order.userId`; `SUBMITTED` only |
+| **Reject Order (F-07)** | `PATCH /api/operator/orders/:id/reject` | 401 | 403 | Allowed | Operator only; non-empty reason; `SUBMITTED` only |
+| **Pay Order (F-08)** | `POST /api/orders/:id/pay` | 401 | Conditional | 403 | 403 if Customer $\neq$ `order.userId`; active `UNPAID` only |
+| **Administer Catalog (F-06)** | `POST`/`PATCH /api/operator/catalog*` | 401 | 403 | Allowed | Operator only |
+| **Fulfill Order (F-09)** | `PATCH /api/operator/orders/:id/ready` &amp; `/complete` | 401 | 403 | Allowed | Operator only; sequential transitions |
 
 ---
 
