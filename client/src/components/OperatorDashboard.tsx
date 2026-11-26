@@ -17,7 +17,8 @@ export interface OrderItem {
 
 export interface OperatorOrder {
   id: number;
-  status: 'SUBMITTED' | 'ACCEPTED' | 'CANCELLED';
+  status: 'SUBMITTED' | 'ACCEPTED' | 'CANCELLED' | 'REJECTED';
+  rejectionReason?: string | null;
   totalAmount: string;
   createdAt: string;
   updatedAt: string;
@@ -46,7 +47,9 @@ export default function OperatorDashboard({ token }: OperatorDashboardProps) {
   const [actionLoadingId, setActionLoadingId] = useState<number | null>(null);
   const [feedback, setFeedback] = useState<{ orderId: number; type: 'success' | 'danger'; message: string } | null>(null);
   const [expandedOrderId, setExpandedOrderId] = useState<number | null>(null);
-  const [filterStatus, setFilterStatus] = useState<'ALL' | 'SUBMITTED' | 'ACCEPTED'>('ALL');
+  const [filterStatus, setFilterStatus] = useState<'ALL' | 'SUBMITTED' | 'ACCEPTED' | 'REJECTED'>('ALL');
+  const [rejectingOrderId, setRejectingOrderId] = useState<number | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
 
   // F-06 Catalog Administration state
   const [catalogItems, setCatalogItems] = useState<AdminCatalogItem[]>([]);
@@ -233,6 +236,61 @@ export default function OperatorDashboard({ token }: OperatorDashboardProps) {
     }
   };
 
+  const handleRejectOrder = async (orderId: number) => {
+    const trimmed = rejectReason.trim();
+    if (!trimmed) {
+      setFeedback({
+        orderId,
+        type: 'danger',
+        message: 'Please provide a rejection reason before confirming.',
+      });
+      return;
+    }
+
+    setActionLoadingId(orderId);
+    setFeedback(null);
+
+    try {
+      const res = await fetch(`/api/operator/orders/${orderId}/reject`, {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ reason: trimmed }),
+      });
+
+      const json = await res.json();
+      if (!res.ok) {
+        throw new Error(json.error?.message || `Failed to reject Order #${orderId}`);
+      }
+
+      const updatedOrder: OperatorOrder = json.data;
+      setOrders((prev) =>
+        prev.map((o) =>
+          o.id === orderId
+            ? { ...o, status: updatedOrder.status, rejectionReason: updatedOrder.rejectionReason, updatedAt: updatedOrder.updatedAt }
+            : o
+        )
+      );
+      setRejectingOrderId(null);
+      setRejectReason('');
+      setFeedback({
+        orderId,
+        type: 'success',
+        message: `Order #${orderId} rejected and item stock restored.`,
+      });
+    } catch (err: any) {
+      setFeedback({
+        orderId,
+        type: 'danger',
+        message: err.message || `An error occurred while rejecting Order #${orderId}`,
+      });
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
   const toggleExpand = (id: number) => {
     setExpandedOrderId(expandedOrderId === id ? null : id);
   };
@@ -257,6 +315,12 @@ export default function OperatorDashboard({ token }: OperatorDashboardProps) {
             <i className="bi bi-x-circle me-1"></i>CANCELLED
           </span>
         );
+      case 'REJECTED':
+        return (
+          <span className="badge bg-danger">
+            <i className="bi bi-x-octagon me-1"></i>REJECTED
+          </span>
+        );
       default:
         return <span className="badge bg-info">{status}</span>;
     }
@@ -270,6 +334,7 @@ export default function OperatorDashboard({ token }: OperatorDashboardProps) {
 
   const totalSubmitted = orders.filter((o) => o.status === 'SUBMITTED').length;
   const totalAccepted = orders.filter((o) => o.status === 'ACCEPTED').length;
+  const totalRejected = orders.filter((o) => o.status === 'REJECTED').length;
 
   if (loading) {
     return (
@@ -582,6 +647,12 @@ export default function OperatorDashboard({ token }: OperatorDashboardProps) {
         >
           Accepted ({totalAccepted})
         </button>
+        <button
+          className={`btn btn-sm ${filterStatus === 'REJECTED' ? 'btn-danger' : 'btn-outline-secondary'}`}
+          onClick={() => setFilterStatus('REJECTED')}
+        >
+          Rejected ({totalRejected})
+        </button>
       </div>
 
       {/* Orders Table */}
@@ -626,7 +697,12 @@ export default function OperatorDashboard({ token }: OperatorDashboardProps) {
                       </td>
                       <td className="small text-muted">{formattedDate}</td>
                       <td className="text-end fw-bold text-primary">${order.totalAmount}</td>
-                      <td className="text-center">{getStatusBadge(order.status)}</td>
+                      <td className="text-center">
+                        {getStatusBadge(order.status)}
+                        {order.status === 'REJECTED' && order.rejectionReason && (
+                          <div className="small text-danger mt-1">{order.rejectionReason}</div>
+                        )}
+                      </td>
                       <td className="text-end">
                         <div className="d-flex justify-content-end align-items-center gap-2">
                           <button
@@ -639,25 +715,42 @@ export default function OperatorDashboard({ token }: OperatorDashboardProps) {
                           </button>
 
                           {order.status === 'SUBMITTED' ? (
-                            <button
-                              className="btn btn-success btn-sm fw-semibold"
-                              onClick={() => handleAcceptOrder(order.id)}
-                              disabled={isActionLoading}
-                            >
-                              {isActionLoading ? (
-                                <>
-                                  <span className="spinner-border spinner-border-sm me-1" role="status"></span>
-                                  Accepting...
-                                </>
-                              ) : (
-                                <>
-                                  <i className="bi bi-check-lg me-1"></i> Accept Order
-                                </>
-                              )}
-                            </button>
+                            <>
+                              <button
+                                className="btn btn-success btn-sm fw-semibold"
+                                onClick={() => handleAcceptOrder(order.id)}
+                                disabled={isActionLoading}
+                              >
+                                {isActionLoading ? (
+                                  <>
+                                    <span className="spinner-border spinner-border-sm me-1" role="status"></span>
+                                    Accepting...
+                                  </>
+                                ) : (
+                                  <>
+                                    <i className="bi bi-check-lg me-1"></i> Accept Order
+                                  </>
+                                )}
+                              </button>
+                              <button
+                                type="button"
+                                className="btn btn-outline-danger btn-sm fw-semibold"
+                                onClick={() => {
+                                  setRejectingOrderId(rejectingOrderId === order.id ? null : order.id);
+                                  setRejectReason('');
+                                }}
+                                disabled={isActionLoading}
+                              >
+                                <i className="bi bi-x-octagon me-1"></i> Reject Order
+                              </button>
+                            </>
                           ) : order.status === 'CANCELLED' ? (
                             <button className="btn btn-light btn-sm text-secondary border disabled" disabled>
                               <i className="bi bi-x-circle me-1"></i> Cancelled
+                            </button>
+                          ) : order.status === 'REJECTED' ? (
+                            <button className="btn btn-light btn-sm text-danger border disabled" disabled>
+                              <i className="bi bi-x-octagon me-1"></i> Rejected
                             </button>
                           ) : (
                             <button className="btn btn-light btn-sm text-success border disabled" disabled>
@@ -665,6 +758,31 @@ export default function OperatorDashboard({ token }: OperatorDashboardProps) {
                             </button>
                           )}
                         </div>
+                        {rejectingOrderId === order.id && order.status === 'SUBMITTED' && (
+                          <div className="mt-2 p-2 bg-light border rounded text-start">
+                            <label htmlFor={`reject-reason-${order.id}`} className="form-label small fw-semibold mb-1">
+                              Rejection Reason
+                            </label>
+                            <div className="d-flex gap-2">
+                              <input
+                                id={`reject-reason-${order.id}`}
+                                type="text"
+                                className="form-control form-control-sm"
+                                placeholder="Reason for rejecting order..."
+                                value={rejectReason}
+                                onChange={(e) => setRejectReason(e.target.value)}
+                              />
+                              <button
+                                type="button"
+                                className="btn btn-danger btn-sm text-nowrap"
+                                onClick={() => handleRejectOrder(order.id)}
+                                disabled={isActionLoading}
+                              >
+                                Confirm Reject
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   );

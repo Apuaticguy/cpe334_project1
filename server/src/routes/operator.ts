@@ -46,6 +46,7 @@ operatorRouter.get('/orders', async (_req: AuthenticatedRequest, res: Response) 
     const data = orders.map((order) => ({
       id: order.id,
       status: order.status,
+      rejectionReason: order.rejectionReason,
       totalAmount: Number(order.totalAmount).toFixed(2),
       createdAt: order.createdAt.toISOString(),
       updatedAt: order.updatedAt.toISOString(),
@@ -128,6 +129,17 @@ operatorRouter.patch('/orders/:id/accept', async (req: AuthenticatedRequest, res
       return;
     }
 
+    if (order.status !== OrderStatus.SUBMITTED) {
+      res.status(409).json({
+        success: false,
+        error: {
+          code: 'STATE_CONFLICT',
+          message: `Cannot accept Order #${orderId} because its status is ${order.status}`,
+        },
+      });
+      return;
+    }
+
     // Update status to ACCEPTED
     const updatedOrder = await prisma.order.update({
       where: { id: orderId },
@@ -145,6 +157,7 @@ operatorRouter.patch('/orders/:id/accept', async (req: AuthenticatedRequest, res
       data: {
         id: updatedOrder.id,
         status: updatedOrder.status,
+        rejectionReason: updatedOrder.rejectionReason,
         totalAmount: Number(updatedOrder.totalAmount).toFixed(2),
         createdAt: updatedOrder.createdAt.toISOString(),
         updatedAt: updatedOrder.updatedAt.toISOString(),
@@ -168,6 +181,127 @@ operatorRouter.patch('/orders/:id/accept', async (req: AuthenticatedRequest, res
     res.status(500).json({
       success: false,
       error: { code: 'INTERNAL_ERROR', message: 'Failed to accept order' },
+    });
+  }
+});
+
+// PATCH /api/operator/orders/:id/reject - Reject SUBMITTED order with mandatory reason & restore stock (F-07)
+operatorRouter.patch('/orders/:id/reject', async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const orderId = parseInt(req.params.id, 10);
+    if (isNaN(orderId) || orderId <= 0) {
+      res.status(400).json({
+        success: false,
+        error: { code: 'INVALID_ID', message: 'Invalid order ID' },
+      });
+      return;
+    }
+
+    const { reason } = req.body ?? {};
+    if (typeof reason !== 'string' || reason.trim().length === 0) {
+      res.status(400).json({
+        success: false,
+        error: { code: 'INVALID_INPUT', message: 'A non-empty rejection reason is required' },
+      });
+      return;
+    }
+    const trimmedReason = reason.trim();
+
+    const existingOrder = await prisma.order.findUnique({
+      where: { id: orderId },
+      include: {
+        user: { select: { id: true, email: true, fullName: true } },
+        items: true,
+      },
+    });
+
+    if (!existingOrder) {
+      res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message: `Order #${orderId} not found` },
+      });
+      return;
+    }
+
+    if (existingOrder.status !== OrderStatus.SUBMITTED) {
+      res.status(409).json({
+        success: false,
+        error: {
+          code: 'STATE_CONFLICT',
+          message: `Cannot reject Order #${orderId} because its status is ${existingOrder.status}`,
+        },
+      });
+      return;
+    }
+
+    const rejectedOrder = await prisma.$transaction(async (tx) => {
+      const updated = await tx.order.updateMany({
+        where: { id: orderId, status: OrderStatus.SUBMITTED },
+        data: {
+          status: OrderStatus.REJECTED,
+          rejectionReason: trimmedReason,
+        },
+      });
+
+      if (updated.count !== 1) {
+        throw new Error('STATE_CONFLICT');
+      }
+
+      for (const item of existingOrder.items) {
+        await tx.catalogItem.update({
+          where: { id: item.catalogItemId },
+          data: { stockQuantity: { increment: item.quantity } },
+        });
+      }
+
+      return tx.order.findUniqueOrThrow({
+        where: { id: orderId },
+        include: {
+          user: { select: { id: true, email: true, fullName: true } },
+          items: true,
+        },
+      });
+    });
+
+    res.status(200).json({
+      success: true,
+      data: {
+        id: rejectedOrder.id,
+        status: rejectedOrder.status,
+        rejectionReason: rejectedOrder.rejectionReason,
+        totalAmount: Number(rejectedOrder.totalAmount).toFixed(2),
+        createdAt: rejectedOrder.createdAt.toISOString(),
+        updatedAt: rejectedOrder.updatedAt.toISOString(),
+        customer: {
+          id: rejectedOrder.user.id,
+          email: rejectedOrder.user.email,
+          fullName: rejectedOrder.user.fullName,
+        },
+        items: rejectedOrder.items.map((item) => ({
+          id: item.id,
+          catalogItemId: item.catalogItemId,
+          itemName: item.itemNameSnapshot,
+          unitPrice: Number(item.unitPriceSnapshot).toFixed(2),
+          quantity: item.quantity,
+          lineTotal: Number(item.lineTotal).toFixed(2),
+        })),
+      },
+    });
+  } catch (error: any) {
+    if (error?.message === 'STATE_CONFLICT') {
+      res.status(409).json({
+        success: false,
+        error: {
+          code: 'STATE_CONFLICT',
+          message: 'Order can no longer be rejected because its status changed',
+        },
+      });
+      return;
+    }
+    console.error('Error rejecting order:', error);
+    res.status(500).json({
+      success: false,
+      error: { code: 'INTERNAL_ERROR', message: 'Failed to reject order' },
     });
   }
 });
