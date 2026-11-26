@@ -344,4 +344,78 @@ describe('OperatorDashboard Component Tests (Feature 4)', () => {
       })
     );
   });
+
+  // TEST-S3-04 (Sprint 3 F-09 / AC-S3-01, AC-S3-02): Fulfillment actions Mark Ready & Complete Order
+  it('[TEST-S3-04 / AC-S3-01, AC-S3-02] transitions ACCEPTED -> READY_FOR_PICKUP -> COMPLETED via fulfillment buttons', async () => {
+    const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      if (url === '/api/operator/orders') {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ success: true, data: mockOrders }),
+        });
+      }
+      if (url === '/api/operator/orders/102/ready' && init?.method === 'PATCH') {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            success: true,
+            data: {
+              ...mockOrders[1],
+              status: 'READY_FOR_PICKUP',
+              readyAt: '2026-11-26T16:00:00.000Z',
+              updatedAt: '2026-11-26T16:00:00.000Z',
+            },
+          }),
+        });
+      }
+      if (url === '/api/operator/orders/102/complete' && init?.method === 'PATCH') {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            success: true,
+            data: {
+              ...mockOrders[1],
+              status: 'COMPLETED',
+              readyAt: '2026-11-26T16:00:00.000Z',
+              completedAt: '2026-11-26T16:05:00.000Z',
+              updatedAt: '2026-11-26T16:05:00.000Z',
+            },
+          }),
+        });
+      }
+      return Promise.reject(new Error(`Unexpected URL: ${url}`));
+    });
+    global.fetch = fetchMock as any;
+
+    render(<OperatorDashboard token={dummyToken} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('#102')).toBeInTheDocument();
+    });
+
+    // Order #102 starts as ACCEPTED -> click Mark Ready
+    const readyBtn = screen.getByRole('button', { name: /mark ready/i });
+    fireEvent.click(readyBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText('READY_FOR_PICKUP')).toBeInTheDocument();
+    });
+
+    // Now click Complete Order
+    const completeBtn = screen.getByRole('button', { name: /complete order/i });
+    fireEvent.click(completeBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText('COMPLETED')).toBeInTheDocument();
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/operator/orders/102/ready',
+      expect.objectContaining({ method: 'PATCH' })
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/operator/orders/102/complete',
+      expect.objectContaining({ method: 'PATCH' })
+    );
+  });
 });

@@ -13,6 +13,8 @@ function formatCustomerOrder(
     paymentStatus: PaymentStatus;
     paymentReference: string | null;
     paidAt: Date | null;
+    readyAt: Date | null;
+    completedAt: Date | null;
     rejectionReason: string | null;
     totalAmount: Prisma.Decimal;
     createdAt: Date;
@@ -35,6 +37,8 @@ function formatCustomerOrder(
     paymentStatus: order.paymentStatus,
     paymentReference: order.paymentReference,
     paidAt: order.paidAt ? order.paidAt.toISOString() : null,
+    readyAt: order.readyAt ? order.readyAt.toISOString() : null,
+    completedAt: order.completedAt ? order.completedAt.toISOString() : null,
     rejectionReason: order.rejectionReason,
     totalAmount: Number(order.totalAmount).toFixed(2),
     createdAt: order.createdAt.toISOString(),

@@ -11,10 +11,12 @@ interface OrderItem {
 
 interface OrderRecord {
   id: number;
-  status: 'SUBMITTED' | 'ACCEPTED' | 'CANCELLED' | 'REJECTED';
+  status: 'SUBMITTED' | 'ACCEPTED' | 'READY_FOR_PICKUP' | 'COMPLETED' | 'CANCELLED' | 'REJECTED';
   paymentStatus?: 'UNPAID' | 'PAID' | 'REFUNDED';
   paymentReference?: string | null;
   paidAt?: string | null;
+  readyAt?: string | null;
+  completedAt?: string | null;
   rejectionReason?: string | null;
   totalAmount: string;
   createdAt: string;
@@ -142,6 +144,10 @@ export default function OrderHistory({ token, onBrowseCatalog }: OrderHistoryPro
         return <span className="badge bg-warning text-dark"><i className="bi bi-clock me-1"></i>SUBMITTED</span>;
       case 'ACCEPTED':
         return <span className="badge bg-success"><i className="bi bi-check-circle me-1"></i>ACCEPTED</span>;
+      case 'READY_FOR_PICKUP':
+        return <span className="badge bg-primary"><i className="bi bi-bag-check me-1"></i>READY_FOR_PICKUP</span>;
+      case 'COMPLETED':
+        return <span className="badge bg-dark"><i className="bi bi-patch-check-fill me-1"></i>COMPLETED</span>;
       case 'CANCELLED':
         return <span className="badge bg-secondary"><i className="bi bi-x-circle me-1"></i>CANCELLED</span>;
       case 'REJECTED':
@@ -325,6 +331,23 @@ export default function OrderHistory({ token, onBrowseCatalog }: OrderHistoryPro
                 <div className="px-3 py-2 bg-danger bg-opacity-10 border-top border-danger border-opacity-25 text-danger small">
                   <i className="bi bi-info-circle-fill me-1"></i>
                   <strong>Rejection Reason:</strong> {order.rejectionReason}
+                </div>
+              )}
+
+              {(order.readyAt || order.completedAt) && (
+                <div className="px-3 py-2 bg-light border-top text-muted small d-flex flex-wrap gap-3">
+                  {order.readyAt && (
+                    <span>
+                      <i className="bi bi-bag-check me-1 text-primary"></i>
+                      <strong>Ready for Pickup:</strong> {new Date(order.readyAt).toLocaleString()}
+                    </span>
+                  )}
+                  {order.completedAt && (
+                    <span>
+                      <i className="bi bi-patch-check-fill me-1 text-success"></i>
+                      <strong>Completed:</strong> {new Date(order.completedAt).toLocaleString()}
+                    </span>
+                  )}
                 </div>
               )}
 

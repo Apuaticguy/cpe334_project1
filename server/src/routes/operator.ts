@@ -11,6 +11,8 @@ function formatOperatorOrder(order: {
   paymentStatus: PaymentStatus;
   paymentReference: string | null;
   paidAt: Date | null;
+  readyAt: Date | null;
+  completedAt: Date | null;
   rejectionReason: string | null;
   totalAmount: Prisma.Decimal;
   createdAt: Date;
@@ -31,6 +33,8 @@ function formatOperatorOrder(order: {
     paymentStatus: order.paymentStatus,
     paymentReference: order.paymentReference,
     paidAt: order.paidAt ? order.paidAt.toISOString() : null,
+    readyAt: order.readyAt ? order.readyAt.toISOString() : null,
+    completedAt: order.completedAt ? order.completedAt.toISOString() : null,
     rejectionReason: order.rejectionReason,
     totalAmount: Number(order.totalAmount).toFixed(2),
     createdAt: order.createdAt.toISOString(),
@@ -300,6 +304,118 @@ operatorRouter.patch('/orders/:id/reject', async (req: AuthenticatedRequest, res
     });
   }
 });
+
+async function handleFulfillmentTransition(
+  req: AuthenticatedRequest,
+  res: Response,
+  config: {
+    expectedStatus: OrderStatus;
+    nextStatus: OrderStatus;
+    timestampField: 'readyAt' | 'completedAt';
+    actionLabel: string;
+    failureMessage: string;
+  }
+) {
+  try {
+    const orderId = parseInt(req.params.id, 10);
+    if (isNaN(orderId) || orderId <= 0) {
+      res.status(400).json({
+        success: false,
+        error: { code: 'INVALID_ID', message: 'Invalid order ID' },
+      });
+      return;
+    }
+
+    const existingOrder = await prisma.order.findUnique({
+      where: { id: orderId },
+      select: { id: true, status: true },
+    });
+
+    if (!existingOrder) {
+      res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message: `Order #${orderId} not found` },
+      });
+      return;
+    }
+
+    if (existingOrder.status !== config.expectedStatus) {
+      res.status(409).json({
+        success: false,
+        error: {
+          code: 'STATE_CONFLICT',
+          message: `Cannot ${config.actionLabel} Order #${orderId} because its status is ${existingOrder.status}`,
+        },
+      });
+      return;
+    }
+
+    const updatedOrder = await prisma.$transaction(async (tx) => {
+      const updated = await tx.order.updateMany({
+        where: { id: orderId, status: config.expectedStatus },
+        data: {
+          status: config.nextStatus,
+          [config.timestampField]: new Date(),
+        },
+      });
+
+      if (updated.count !== 1) {
+        throw new Error('STATE_CONFLICT');
+      }
+
+      return tx.order.findUniqueOrThrow({
+        where: { id: orderId },
+        include: {
+          user: { select: { id: true, email: true, fullName: true } },
+          items: true,
+        },
+      });
+    });
+
+    res.status(200).json({
+      success: true,
+      data: formatOperatorOrder(updatedOrder),
+    });
+  } catch (error: any) {
+    if (error?.message === 'STATE_CONFLICT') {
+      res.status(409).json({
+        success: false,
+        error: {
+          code: 'STATE_CONFLICT',
+          message: 'Order state changed before fulfillment update could complete',
+        },
+      });
+      return;
+    }
+    console.error(config.failureMessage, error);
+    res.status(500).json({
+      success: false,
+      error: { code: 'INTERNAL_ERROR', message: config.failureMessage },
+    });
+  }
+}
+
+// PATCH /api/operator/orders/:id/ready - Advance ACCEPTED order to READY_FOR_PICKUP (F-09)
+operatorRouter.patch('/orders/:id/ready', (req: AuthenticatedRequest, res: Response) =>
+  handleFulfillmentTransition(req, res, {
+    expectedStatus: OrderStatus.ACCEPTED,
+    nextStatus: OrderStatus.READY_FOR_PICKUP,
+    timestampField: 'readyAt',
+    actionLabel: 'mark ready',
+    failureMessage: 'Failed to mark order ready for pickup',
+  })
+);
+
+// PATCH /api/operator/orders/:id/complete - Advance READY_FOR_PICKUP order to COMPLETED (F-09)
+operatorRouter.patch('/orders/:id/complete', (req: AuthenticatedRequest, res: Response) =>
+  handleFulfillmentTransition(req, res, {
+    expectedStatus: OrderStatus.READY_FOR_PICKUP,
+    nextStatus: OrderStatus.COMPLETED,
+    timestampField: 'completedAt',
+    actionLabel: 'complete',
+    failureMessage: 'Failed to complete order',
+  })
+);
 
 // GET /api/operator/catalog - List all catalog items (active & inactive) for operators (F-06)
 operatorRouter.get('/catalog', async (_req: AuthenticatedRequest, res: Response) => {

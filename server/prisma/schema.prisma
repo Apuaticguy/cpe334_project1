@@ -17,6 +17,8 @@ enum OrderStatus {
   ACCEPTED
   CANCELLED
   REJECTED
+  READY_FOR_PICKUP
+  COMPLETED
 }
 
 enum PaymentStatus {
@@ -60,6 +62,8 @@ model Order {
   paymentReference String?
   paidAt           DateTime?
   rejectionReason  String?
+  readyAt          DateTime?
+  completedAt      DateTime?
   totalAmount      Decimal       @db.Decimal(10, 2)
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
