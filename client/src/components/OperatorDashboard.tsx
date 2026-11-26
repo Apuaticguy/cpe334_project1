@@ -17,10 +17,12 @@ export interface OrderItem {
 
 export interface OperatorOrder {
   id: number;
-  status: 'SUBMITTED' | 'ACCEPTED' | 'CANCELLED' | 'REJECTED';
+  status: 'SUBMITTED' | 'ACCEPTED' | 'READY_FOR_PICKUP' | 'COMPLETED' | 'CANCELLED' | 'REJECTED';
   paymentStatus?: 'UNPAID' | 'PAID' | 'REFUNDED';
   paymentReference?: string | null;
   paidAt?: string | null;
+  readyAt?: string | null;
+  completedAt?: string | null;
   rejectionReason?: string | null;
   totalAmount: string;
   createdAt: string;
@@ -50,7 +52,7 @@ export default function OperatorDashboard({ token }: OperatorDashboardProps) {
   const [actionLoadingId, setActionLoadingId] = useState<number | null>(null);
   const [feedback, setFeedback] = useState<{ orderId: number; type: 'success' | 'danger'; message: string } | null>(null);
   const [expandedOrderId, setExpandedOrderId] = useState<number | null>(null);
-  const [filterStatus, setFilterStatus] = useState<'ALL' | 'SUBMITTED' | 'ACCEPTED' | 'REJECTED'>('ALL');
+  const [filterStatus, setFilterStatus] = useState<'ALL' | 'SUBMITTED' | 'ACCEPTED' | 'READY_FOR_PICKUP' | 'COMPLETED' | 'REJECTED'>('ALL');
   const [rejectingOrderId, setRejectingOrderId] = useState<number | null>(null);
   const [rejectReason, setRejectReason] = useState('');
 
@@ -294,6 +296,59 @@ export default function OperatorDashboard({ token }: OperatorDashboardProps) {
     }
   };
 
+  const handleFulfillmentTransition = async (orderId: number, action: 'ready' | 'complete') => {
+    setActionLoadingId(orderId);
+    setFeedback(null);
+
+    try {
+      const res = await fetch(`/api/operator/orders/${orderId}/${action}`, {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const json = await res.json();
+
+      if (!res.ok) {
+        throw new Error(json.error?.message || `Failed to update fulfillment status for Order #${orderId}`);
+      }
+
+      const updatedOrder: OperatorOrder = json.data;
+      setOrders((prev) =>
+        prev.map((o) =>
+          o.id === orderId
+            ? {
+                ...o,
+                status: updatedOrder.status,
+                readyAt: updatedOrder.readyAt,
+                completedAt: updatedOrder.completedAt,
+                updatedAt: updatedOrder.updatedAt,
+              }
+            : o
+        )
+      );
+
+      setFeedback({
+        orderId,
+        type: 'success',
+        message:
+          action === 'ready'
+            ? `Order #${orderId} marked ready for pickup.`
+            : `Order #${orderId} has been marked completed.`,
+      });
+    } catch (err: any) {
+      setFeedback({
+        orderId,
+        type: 'danger',
+        message: err.message || `An error occurred while updating Order #${orderId}`,
+      });
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
   const toggleExpand = (id: number) => {
     setExpandedOrderId(expandedOrderId === id ? null : id);
   };
@@ -310,6 +365,18 @@ export default function OperatorDashboard({ token }: OperatorDashboardProps) {
         return (
           <span className="badge bg-success">
             <i className="bi bi-check2-circle me-1"></i>ACCEPTED
+          </span>
+        );
+      case 'READY_FOR_PICKUP':
+        return (
+          <span className="badge bg-primary">
+            <i className="bi bi-bag-check me-1"></i>READY_FOR_PICKUP
+          </span>
+        );
+      case 'COMPLETED':
+        return (
+          <span className="badge bg-dark">
+            <i className="bi bi-patch-check-fill me-1"></i>COMPLETED
           </span>
         );
       case 'CANCELLED':
@@ -337,6 +404,8 @@ export default function OperatorDashboard({ token }: OperatorDashboardProps) {
 
   const totalSubmitted = orders.filter((o) => o.status === 'SUBMITTED').length;
   const totalAccepted = orders.filter((o) => o.status === 'ACCEPTED').length;
+  const totalReady = orders.filter((o) => o.status === 'READY_FOR_PICKUP').length;
+  const totalCompleted = orders.filter((o) => o.status === 'COMPLETED').length;
   const totalRejected = orders.filter((o) => o.status === 'REJECTED').length;
 
   if (loading) {
@@ -565,7 +634,7 @@ export default function OperatorDashboard({ token }: OperatorDashboardProps) {
             <i className="bi bi-inbox-fill me-2 text-primary"></i>Operator Order Queue
           </h3>
           <p className="text-muted small mb-0">
-            Authoritative order queue management and atomic status transitions (SUBMITTED &rarr; ACCEPTED)
+            Authoritative order queue management and atomic status transitions (SUBMITTED &rarr; ACCEPTED &rarr; READY_FOR_PICKUP &rarr; COMPLETED)
           </p>
         </div>
         <button className="btn btn-outline-secondary btn-sm align-self-start align-self-md-auto" onClick={fetchOrders}>
@@ -631,7 +700,7 @@ export default function OperatorDashboard({ token }: OperatorDashboardProps) {
       )}
 
       {/* Filter Tabs */}
-      <div className="d-flex gap-2 mb-3">
+      <div className="d-flex flex-wrap gap-2 mb-3">
         <button
           className={`btn btn-sm ${filterStatus === 'ALL' ? 'btn-primary' : 'btn-outline-secondary'}`}
           onClick={() => setFilterStatus('ALL')}
@@ -649,6 +718,18 @@ export default function OperatorDashboard({ token }: OperatorDashboardProps) {
           onClick={() => setFilterStatus('ACCEPTED')}
         >
           Accepted ({totalAccepted})
+        </button>
+        <button
+          className={`btn btn-sm ${filterStatus === 'READY_FOR_PICKUP' ? 'btn-primary' : 'btn-outline-secondary'}`}
+          onClick={() => setFilterStatus('READY_FOR_PICKUP')}
+        >
+          Ready for Pickup ({totalReady})
+        </button>
+        <button
+          className={`btn btn-sm ${filterStatus === 'COMPLETED' ? 'btn-dark' : 'btn-outline-secondary'}`}
+          onClick={() => setFilterStatus('COMPLETED')}
+        >
+          Completed ({totalCompleted})
         </button>
         <button
           className={`btn btn-sm ${filterStatus === 'REJECTED' ? 'btn-danger' : 'btn-outline-secondary'}`}
@@ -762,17 +843,53 @@ export default function OperatorDashboard({ token }: OperatorDashboardProps) {
                                 <i className="bi bi-x-octagon me-1"></i> Reject Order
                               </button>
                             </>
+                          ) : order.status === 'ACCEPTED' ? (
+                            <button
+                              type="button"
+                              className="btn btn-primary btn-sm fw-semibold"
+                              onClick={() => handleFulfillmentTransition(order.id, 'ready')}
+                              disabled={isActionLoading}
+                            >
+                              {isActionLoading ? (
+                                <>
+                                  <span className="spinner-border spinner-border-sm me-1" role="status"></span>
+                                  Updating...
+                                </>
+                              ) : (
+                                <>
+                                  <i className="bi bi-bag-check me-1"></i> Mark Ready
+                                </>
+                              )}
+                            </button>
+                          ) : order.status === 'READY_FOR_PICKUP' ? (
+                            <button
+                              type="button"
+                              className="btn btn-dark btn-sm fw-semibold"
+                              onClick={() => handleFulfillmentTransition(order.id, 'complete')}
+                              disabled={isActionLoading}
+                            >
+                              {isActionLoading ? (
+                                <>
+                                  <span className="spinner-border spinner-border-sm me-1" role="status"></span>
+                                  Completing...
+                                </>
+                              ) : (
+                                <>
+                                  <i className="bi bi-patch-check-fill me-1"></i> Complete Order
+                                </>
+                              )}
+                            </button>
+                          ) : order.status === 'COMPLETED' ? (
+                            <button className="btn btn-light btn-sm text-dark border disabled" disabled>
+                              <i className="bi bi-patch-check-fill me-1"></i> Completed
+                            </button>
                           ) : order.status === 'CANCELLED' ? (
                             <button className="btn btn-light btn-sm text-secondary border disabled" disabled>
                               <i className="bi bi-x-circle me-1"></i> Cancelled
                             </button>
-                          ) : order.status === 'REJECTED' ? (
+                          ) : (
                             <button className="btn btn-light btn-sm text-danger border disabled" disabled>
                               <i className="bi bi-x-octagon me-1"></i> Rejected
-                            </button>
-                          ) : (
-                            <button className="btn btn-light btn-sm text-success border disabled" disabled>
-                              <i className="bi bi-check2-all me-1"></i> Accepted
                             </button>
                           )}
                         </div>
