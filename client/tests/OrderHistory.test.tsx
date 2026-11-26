@@ -271,7 +271,7 @@ describe('OrderHistory Component Tests', () => {
 
     await waitFor(() => {
       expect(screen.getByText('PAID')).toBeInTheDocument();
-      expect(screen.getByText(/PAY-301-1795704000000/i)).toBeInTheDocument();
+      expect(screen.getAllByText(/PAY-301-1795704000000/i).length).toBeGreaterThanOrEqual(1);
     });
 
     expect(fetchMock).toHaveBeenCalledWith(

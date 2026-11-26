@@ -40,12 +40,24 @@ describe('Feature F-08: Simulated Payment Processing Lifecycle API Tests', () =>
       .send({ email: 'operator1@example.com', password: 'Password123!' });
     operatorToken = loginOp.body.data.token;
 
-    const item = await prisma.catalogItem.findFirst({ where: { isActive: true, stockQuantity: { gte: 10 } } });
-    if (!item) throw new Error('Seeded catalog item with sufficient stock not found');
-    catalogItemId = item.id;
+    // Create an isolated catalog item so parallel Vitest suites cannot mutate its stock
+    const isolatedItem = await prisma.catalogItem.create({
+      data: {
+        name: `Payment Test Item ${Date.now()}`,
+        description: 'Isolated test item for F-08 payment lifecycle suite',
+        unitPrice: 5.50,
+        stockQuantity: 50,
+        isActive: true
+      }
+    });
+    catalogItemId = isolatedItem.id;
   });
 
   afterAll(async () => {
+    if (catalogItemId) {
+      await prisma.orderItem.deleteMany({ where: { catalogItemId } });
+      await prisma.catalogItem.deleteMany({ where: { id: catalogItemId } });
+    }
     await prisma.$disconnect();
   });
 
