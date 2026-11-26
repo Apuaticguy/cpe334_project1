@@ -171,8 +171,8 @@ erDiagram
 1. **Login Screen (`/login`):** Accessible to all; email/password input, client validation, login submit, error alerts on invalid credentials.
 2. **Catalog / Store Screen (`/catalog`):** Grid/list of active catalog items with item cards, stock badges, quantity selectors, and "Add to Order" action.
 3. **Checkout / Order Review Screen (`/checkout`):** Order summary with selected items, server-calculated subtotal preview, and "Confirm & Place Order" button.
-4. **Customer Order History Screen (`/my-orders`):** Lists past orders for current customer with status badges (`SUBMITTED`, `ACCEPTED`), timestamps, and total amounts. Click opens detail breakdown.
-5. **Operator Order Queue Screen (`/operator/orders`):** Operator-only dashboard displaying live queue of submitted orders with customer names, timestamps, and an **[Accept Order]** button.
+4. **Customer Order History Screen (`/my-orders`):** Lists past orders for current customer with status badges (`SUBMITTED`, `ACCEPTED`, `CANCELLED`, `REJECTED`, `READY_FOR_PICKUP`, `COMPLETED`), payment status (`UNPAID`, `PAID`, `REFUNDED`) with **Pay Now** checkout &amp; receipt metadata, **Cancel Order** control, rejection reasons, timestamps, and expandable line-item snapshots.
+5. **Operator Order Queue &amp; Catalog Screen (`/operator/orders`):** Operator-only dashboard with two tabs: **Order Queue** (accept, reject with reason, mark ready for pickup, complete order, view payment status) and **Manage Catalog** (add items, update unit prices/stock, toggle active visibility).
 
 ### 3.2 UI States Standard
 * **Loading State:** Spinner or animated skeleton showing request in flight.

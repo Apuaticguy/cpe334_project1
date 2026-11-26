@@ -1,8 +1,8 @@
 # Feature Inventory - QuickOrder
 
 **Project:** QuickOrder (Theme 4: E-Commerce or Ordering System)  
-**Document Version:** 2.0.0 (Deliverable 2 Contract Baseline — Issue #36)  
-**Status:** Updated Feature Inventory  
+**Document Version:** 2.1.0 (Deliverable 2 Integrated Release Candidate — Issue #41)  
+**Status:** Updated Integrated Baseline  
 
 ---
 
@@ -15,9 +15,9 @@
 | **F-03** | Authoritative Order Placement | Customer order submission with line items; server calculates totals authoritatively from DB prices and enforces stock availability. | **Sprint 1** | Accepted (`aa632f6`) | Customer | F-01, F-02 |
 | **F-04** | Customer Order History &amp; Detail View | Customer retrieves past orders and inspects full order breakdown with line item snapshot prices and cross-customer isolation. | **Sprint 1** | Accepted (`aa632f6`) | Customer | F-01, F-03 |
 | **F-05** | Operator Order Queue &amp; State Acceptance | Operators view all incoming orders and accept submitted orders (`SUBMITTED` $\rightarrow$ `ACCEPTED`). | **Sprint 1** | Accepted (`aa632f6`) | Operator | F-01, F-03 |
-| **F-06** | Catalog &amp; Inventory Administration | Operators add new catalog items, edit prices, update descriptions, toggle visibility, and manage inventory stock levels. | **Sprint 2** | Planned D2 (#37) | Operator | F-01, F-02 |
-| **F-07** | Order Cancellation &amp; Rejection Workflow | Customers cancel pending orders (`4cedbb5`, Lab 7); operators reject orders with a recorded reason (`#38`), atomically restoring stock. | **Sprint 2** | Partial (`4cedbb5` + #38) | Customer, Operator | F-03, F-05 |
-| **F-08** | Simulated Payment Processing | Integration of simulated payment lifecycle (`UNPAID` $\rightarrow$ `PAID` $\rightarrow$ `REFUNDED`) with transaction receipts. | **Sprint 2** | Planned D2 (#39) | Customer, Operator | F-03, F-07 |
-| **F-09** | Order Fulfillment &amp; Pickup Notification | Order transitions `ACCEPTED` $\rightarrow$ `READY_FOR_PICKUP` $\rightarrow$ `COMPLETED` with timestamped logs. | **Sprint 3** | Planned D2 (#40) | Operator | F-05, F-08 |
+| **F-06** | Catalog &amp; Inventory Administration | Operators add new catalog items, edit prices, update descriptions, toggle visibility, and manage inventory stock levels. | **Sprint 2** | Implemented &amp; Tested (`add4c5d`, PR #43) | Operator | F-01, F-02 |
+| **F-07** | Order Cancellation &amp; Rejection Workflow | Customers cancel pending orders (`4cedbb5`, Lab 7); operators reject orders with a recorded reason (`f6d6346`, PR #44), atomically restoring stock. | **Sprint 2** | Implemented &amp; Tested (`4cedbb5` + `f6d6346`) | Customer, Operator | F-03, F-05 |
+| **F-08** | Simulated Payment Processing | Integration of simulated payment lifecycle (`UNPAID` $\rightarrow$ `PAID` $\rightarrow$ `REFUNDED`) with transaction receipts and atomic refund on cancel/reject. | **Sprint 2** | Implemented &amp; Tested (`280e4a3`, PR #45) | Customer, Operator | F-03, F-07 |
+| **F-09** | Order Fulfillment &amp; Pickup Notification | Order transitions `ACCEPTED` $\rightarrow$ `READY_FOR_PICKUP` $\rightarrow$ `COMPLETED` with timestamped logs (`readyAt`, `completedAt`). | **Sprint 3** | Implemented &amp; Tested (`699b37a`, PR #46) | Operator | F-05, F-08 |
 | **F-10** | Sales Analytics &amp; Reporting Dashboard | Aggregate revenue reporting, top-selling items, average order values, and operational metrics. | **Sprint 3** | Planned (13 Dec) | Operator | F-03, F-09 |
 | **F-11** | Customer Favorite Orders &amp; Re-Order | Customers save orders as favorites and duplicate past orders with one click at live prices. | **Sprint 3** | Planned (13 Dec) | Customer | F-04 |

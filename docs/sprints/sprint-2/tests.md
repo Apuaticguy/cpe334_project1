@@ -1,8 +1,8 @@
 # Software Test Specification (STS) - Sprint 2
 
 **Project:** QuickOrder (Theme 4: E-Commerce or Ordering System)  
-**Document Version:** 2.0.0 (Sprint 2 Pre-Implementation Test Plan — Issue #36)  
-**Status:** Pre-Implementation Draft  
+**Document Version:** 2.1.0 (Deliverable 2 Executed Test Mapping — Issues #37–#39)  
+**Status:** Executed &amp; Verified (100% Passing)  
 
 ---
 
