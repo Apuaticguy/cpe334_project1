@@ -218,4 +218,69 @@ describe('OperatorDashboard Component Tests (Feature 4)', () => {
 
     expect(screen.getByText(/There are currently no customer orders placed in the system/i)).toBeInTheDocument();
   });
+
+  // TEST-S2-13 / AC-S2-01 (Sprint 2 F-06): Catalog Administration UI
+  it('[TEST-S2-13 / AC-S2-01] switches to Manage Catalog tab and submits POST /api/operator/catalog to create an item', async () => {
+    const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      if (url === '/api/operator/orders') {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ success: true, data: mockOrders }),
+        });
+      }
+      if (url === '/api/operator/catalog' && (!init?.method || init.method === 'GET')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            success: true,
+            data: [
+              { id: 1, name: 'Iced Matcha Latte', description: 'Matcha', unitPrice: '4.50', stockQuantity: 50, isActive: true },
+            ],
+          }),
+        });
+      }
+      if (url === '/api/operator/catalog' && init?.method === 'POST') {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            success: true,
+            data: { id: 9, name: 'Thai Iced Tea', description: 'Sweet tea', unitPrice: '4.25', stockQuantity: 15, isActive: true },
+          }),
+        });
+      }
+      return Promise.reject(new Error(`Unexpected URL: ${url}`));
+    });
+    global.fetch = fetchMock as any;
+
+    render(<OperatorDashboard token={dummyToken} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('#101')).toBeInTheDocument();
+    });
+
+    // Switch to Manage Catalog tab
+    const catalogTabBtn = screen.getByRole('button', { name: /manage catalog/i });
+    fireEvent.click(catalogTabBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText('Iced Matcha Latte')).toBeInTheDocument();
+    });
+
+    // Fill Add Item form
+    fireEvent.change(screen.getByLabelText(/item name/i), { target: { value: 'Thai Iced Tea' } });
+    fireEvent.change(screen.getByLabelText(/description/i), { target: { value: 'Sweet tea' } });
+    fireEvent.change(screen.getByLabelText(/unit price/i), { target: { value: '4.25' } });
+    fireEvent.change(screen.getByLabelText(/stock quantity/i), { target: { value: '15' } });
+
+    fireEvent.click(screen.getByRole('button', { name: /add catalog item/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Thai Iced Tea')).toBeInTheDocument();
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/operator/catalog',
+      expect.objectContaining({ method: 'POST' })
+    );
+  });
 });
