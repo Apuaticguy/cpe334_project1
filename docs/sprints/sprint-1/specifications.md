@@ -150,23 +150,27 @@ Customers view the seeded catalog. During order placement, the client transmits 
 
 ---
 
-## 3. Feature Engineering Contract: F-04 (Customer Order History & Detail)
+## 3. Feature Engineering Contract: F-04 (Customer Order History, Detail & Cancellation)
 
-* **Linked Requirements:** FR-05, BR-04  
+* **Linked Requirements:** FR-05, FR-09 (Lab 7), BR-04, BR-07 (Lab 7)  
 * **Assignee:** Panyakorn Lohaviboonsap (`@panyakornlohaviboonsap`)  
 * **Reviewer:** Ivan (`@Apuaticguy`)  
-* **Branch:** `feature/3-order-history`  
+* **Branch:** `feature/3-order-history` (Revised for Lab 7 via Issue #30)  
 
 ### 3.1 Behavior & Workflow
-Customers retrieve their past order summaries. Clicking an order loads full line-item details. The backend strictly ensures Customer A cannot query Customer B's orders.
+Customers retrieve their past order summaries. Clicking an order loads full line-item details. The backend strictly ensures Customer A cannot query Customer B's orders. Under the Lab 7 specification revision (Issue #30), the owning `CUSTOMER` may cancel an order while its status is `SUBMITTED` (`SUBMITTED` $\rightarrow$ `CANCELLED`), atomically restoring item stock quantities.
 
 ### 3.2 API Specifications
 * `GET /api/orders/my-orders`: Returns array of orders for authenticated user.
 * `GET /api/orders/:id`: Returns single order detail; returns `403 Forbidden` if `order.userId != current_user.id`.
+* `PATCH /api/orders/:id/cancel` *(Lab 7 Revision)*: Cancels a `SUBMITTED` order owned by the authenticated `CUSTOMER` and atomically restores `stockQuantity` on `catalog_items`. Returns `401 Unauthorized` (no token), `403 Forbidden` (non-owner or `OPERATOR`), `404 Not Found` (unknown order), or `409 Conflict` (`ORDER_NOT_CANCELLABLE` if status is `ACCEPTED` or `CANCELLED`).
 
 ### 3.3 Acceptance Criteria
 * **AC-09:** Given an authenticated customer, `GET /api/orders/my-orders` returns only orders belonging to that customer.
 * **AC-10:** Given Customer A requests Customer B's order ID via `GET /api/orders/:id`, the server rejects with HTTP 403 Forbidden without disclosing private data.
+* **AC-14 (Lab 7):** Given an owning `CUSTOMER` and an order in `SUBMITTED` status, calling `PATCH /api/orders/:id/cancel` returns HTTP 200 OK, updates `status` to `CANCELLED`, and atomically restores `catalog_items.stockQuantity` for all line items.
+* **AC-15 (Lab 7):** Given an order in `ACCEPTED` or `CANCELLED` status, calling `PATCH /api/orders/:id/cancel` rejects with HTTP 409 Conflict (`ORDER_NOT_CANCELLABLE`) and leaves status and stock unchanged.
+* **AC-16 (Lab 7):** Given a non-owning `CUSTOMER` or an `OPERATOR`, calling `PATCH /api/orders/:id/cancel` rejects with HTTP 403 Forbidden and leaves status and stock unchanged. In `<OrderHistory />`, the "Cancel Order" button is rendered only for `SUBMITTED` orders.
 
 ---
 
