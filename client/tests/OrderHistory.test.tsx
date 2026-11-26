@@ -205,4 +205,82 @@ describe('OrderHistory Component Tests', () => {
     expect(screen.getByText(/Store closed early due to power maintenance/i)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /cancel order/i })).not.toBeInTheDocument();
   });
+
+  // TEST-S2-14 / AC-S2-10: Pay Now on active UNPAID order -> PAID receipt
+  it('[TEST-S2-14 / AC-S2-10] renders Pay Now button for active UNPAID orders and displays PAID receipt after checkout', async () => {
+    const mockOrders = [
+      {
+        id: 301,
+        status: 'SUBMITTED',
+        paymentStatus: 'UNPAID',
+        paymentReference: null,
+        paidAt: null,
+        totalAmount: '4.50',
+        createdAt: '2026-11-26T10:00:00.000Z',
+        updatedAt: '2026-11-26T10:00:00.000Z',
+        items: [
+          {
+            id: 1,
+            catalogItemId: 1,
+            itemName: 'Iced Matcha Latte',
+            unitPrice: '4.50',
+            quantity: 1,
+            lineTotal: '4.50'
+          }
+        ]
+      }
+    ];
+
+    const fetchMock = vi.fn().mockImplementation((url: string, options?: RequestInit) => {
+      if (url === '/api/orders/my-orders') {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({ success: true, data: mockOrders })
+        } as Response);
+      }
+      if (url === '/api/orders/301/pay' && options?.method === 'POST') {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            success: true,
+            data: {
+              ...mockOrders[0],
+              paymentStatus: 'PAID',
+              paymentReference: 'PAY-301-1795704000000',
+              paidAt: '2026-11-26T10:02:00.000Z',
+              updatedAt: '2026-11-26T10:02:00.000Z'
+            }
+          })
+        } as Response);
+      }
+      return Promise.reject(new Error(`Unexpected fetch: ${url}`));
+    });
+    global.fetch = fetchMock as any;
+
+    render(<OrderHistory token={dummyToken} onBrowseCatalog={() => {}} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Order #301')).toBeInTheDocument();
+    });
+
+    expect(screen.getByText('UNPAID')).toBeInTheDocument();
+    const payBtn = screen.getByRole('button', { name: /pay now/i });
+    fireEvent.click(payBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText('PAID')).toBeInTheDocument();
+      expect(screen.getAllByText(/PAY-301-1795704000000/i).length).toBeGreaterThanOrEqual(1);
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/orders/301/pay',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({ Authorization: `Bearer ${dummyToken}` })
+      })
+    );
+    expect(screen.queryByRole('button', { name: /pay now/i })).not.toBeInTheDocument();
+  });
 });

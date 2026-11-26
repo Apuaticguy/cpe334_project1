@@ -18,6 +18,9 @@ export interface OrderItem {
 export interface OperatorOrder {
   id: number;
   status: 'SUBMITTED' | 'ACCEPTED' | 'CANCELLED' | 'REJECTED';
+  paymentStatus?: 'UNPAID' | 'PAID' | 'REFUNDED';
+  paymentReference?: string | null;
+  paidAt?: string | null;
   rejectionReason?: string | null;
   totalAmount: string;
   createdAt: string;
@@ -699,6 +702,21 @@ export default function OperatorDashboard({ token }: OperatorDashboardProps) {
                       <td className="text-end fw-bold text-primary">${order.totalAmount}</td>
                       <td className="text-center">
                         {getStatusBadge(order.status)}
+                        {order.paymentStatus && (
+                          <div className="mt-1">
+                            <span
+                              className={`badge ${
+                                order.paymentStatus === 'PAID'
+                                  ? 'bg-info text-dark'
+                                  : order.paymentStatus === 'REFUNDED'
+                                    ? 'bg-warning text-dark'
+                                    : 'bg-light text-dark border'
+                              }`}
+                            >
+                              {order.paymentStatus}
+                            </span>
+                          </div>
+                        )}
                         {order.status === 'REJECTED' && order.rejectionReason && (
                           <div className="small text-danger mt-1">{order.rejectionReason}</div>
                         )}

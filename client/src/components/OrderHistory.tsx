@@ -12,6 +12,9 @@ interface OrderItem {
 interface OrderRecord {
   id: number;
   status: 'SUBMITTED' | 'ACCEPTED' | 'CANCELLED' | 'REJECTED';
+  paymentStatus?: 'UNPAID' | 'PAID' | 'REFUNDED';
+  paymentReference?: string | null;
+  paidAt?: string | null;
   rejectionReason?: string | null;
   totalAmount: string;
   createdAt: string;
@@ -30,6 +33,7 @@ export default function OrderHistory({ token, onBrowseCatalog }: OrderHistoryPro
   const [error, setError] = useState<string | null>(null);
   const [actionFeedback, setActionFeedback] = useState<{ type: 'success' | 'danger'; message: string } | null>(null);
   const [cancellingId, setCancellingId] = useState<number | null>(null);
+  const [payingId, setPayingId] = useState<number | null>(null);
   const [expandedOrderId, setExpandedOrderId] = useState<number | null>(null);
 
   const fetchOrders = async () => {
@@ -88,6 +92,47 @@ export default function OrderHistory({ token, onBrowseCatalog }: OrderHistoryPro
       });
     } finally {
       setCancellingId(null);
+    }
+  };
+
+  const handlePayOrder = async (orderId: number) => {
+    setPayingId(orderId);
+    setActionFeedback(null);
+    try {
+      const res = await fetch(`/api/orders/${orderId}/pay`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        throw new Error(json.error?.message || `Failed to pay Order #${orderId}`);
+      }
+      const updatedOrder: OrderRecord = json.data;
+      setOrders((prev) => prev.map((o) => (o.id === orderId ? updatedOrder : o)));
+      setActionFeedback({
+        type: 'success',
+        message: `Payment confirmed for Order #${orderId} (${updatedOrder.paymentReference}).`
+      });
+    } catch (err: any) {
+      setActionFeedback({
+        type: 'danger',
+        message: err.message || `Unable to pay Order #${orderId}`
+      });
+    } finally {
+      setPayingId(null);
+    }
+  };
+
+  const getPaymentBadge = (paymentStatus?: string) => {
+    switch (paymentStatus) {
+      case 'PAID':
+        return <span className="badge bg-info text-dark"><i className="bi bi-credit-card-2-front me-1"></i>PAID</span>;
+      case 'REFUNDED':
+        return <span className="badge bg-warning text-dark"><i className="bi bi-arrow-counterclockwise me-1"></i>REFUNDED</span>;
+      case 'UNPAID':
+        return <span className="badge bg-light text-dark border">UNPAID</span>;
+      default:
+        return null;
     }
   };
 
@@ -189,6 +234,10 @@ export default function OrderHistory({ token, onBrowseCatalog }: OrderHistoryPro
           const isExpanded = expandedOrderId === order.id;
           const formattedDate = new Date(order.createdAt).toLocaleString();
           const isCancelling = cancellingId === order.id;
+          const isPaying = payingId === order.id;
+          const canPay =
+            order.paymentStatus === 'UNPAID' &&
+            (order.status === 'SUBMITTED' || order.status === 'ACCEPTED');
 
           return (
             <div key={order.id} className="card shadow-sm border-0 overflow-hidden">
@@ -197,20 +246,43 @@ export default function OrderHistory({ token, onBrowseCatalog }: OrderHistoryPro
                 style={{ cursor: 'pointer' }}
                 onClick={() => toggleExpand(order.id)}
               >
-                <div className="d-flex align-items-center gap-3">
+                <div className="d-flex align-items-center gap-3 flex-wrap">
                   <span className="fw-bold text-dark fs-5">Order #{order.id}</span>
                   {getStatusBadge(order.status)}
+                  {getPaymentBadge(order.paymentStatus)}
                   <span className="text-muted small d-none d-md-inline">
                     <i className="bi bi-calendar3 me-1"></i> {formattedDate}
                   </span>
                 </div>
 
-                <div className="d-flex align-items-center gap-3">
+                <div className="d-flex align-items-center gap-2">
+                  {canPay && (
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm fw-semibold"
+                      disabled={isPaying || isCancelling}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handlePayOrder(order.id);
+                      }}
+                    >
+                      {isPaying ? (
+                        <>
+                          <span className="spinner-border spinner-border-sm me-1" role="status"></span>
+                          Paying...
+                        </>
+                      ) : (
+                        <>
+                          <i className="bi bi-credit-card me-1"></i> Pay Now
+                        </>
+                      )}
+                    </button>
+                  )}
                   {order.status === 'SUBMITTED' && (
                     <button
                       type="button"
                       className="btn btn-outline-danger btn-sm fw-semibold"
-                      disabled={isCancelling}
+                      disabled={isCancelling || isPaying}
                       onClick={(e) => {
                         e.stopPropagation();
                         handleCancelOrder(order.id);
@@ -236,6 +308,18 @@ export default function OrderHistory({ token, onBrowseCatalog }: OrderHistoryPro
                   </button>
                 </div>
               </div>
+
+              {order.paymentReference && (order.paymentStatus === 'PAID' || order.paymentStatus === 'REFUNDED') && (
+                <div className="px-3 py-2 bg-info bg-opacity-10 border-top text-dark small">
+                  <i className="bi bi-receipt-cutoff me-1 text-primary"></i>
+                  <strong>Receipt:</strong> <code>{order.paymentReference}</code>
+                  {order.paidAt && (
+                    <span className="text-muted ms-2">
+                      (Paid {new Date(order.paidAt).toLocaleString()} &bull; Total ${order.totalAmount})
+                    </span>
+                  )}
+                </div>
+              )}
 
               {order.status === 'REJECTED' && order.rejectionReason && (
                 <div className="px-3 py-2 bg-danger bg-opacity-10 border-top border-danger border-opacity-25 text-danger small">

@@ -1,9 +1,55 @@
 import { Router, Response } from 'express';
-import { Prisma, Role, OrderStatus } from '@prisma/client';
+import { Prisma, Role, OrderStatus, PaymentStatus } from '@prisma/client';
 import { prisma } from '../prisma.js';
 import { requireAuth, requireRole, AuthenticatedRequest } from '../middleware/auth.js';
 
 export const operatorRouter = Router();
+
+function formatOperatorOrder(order: {
+  id: number;
+  status: OrderStatus;
+  paymentStatus: PaymentStatus;
+  paymentReference: string | null;
+  paidAt: Date | null;
+  rejectionReason: string | null;
+  totalAmount: Prisma.Decimal;
+  createdAt: Date;
+  updatedAt: Date;
+  user: { id: number; email: string; fullName: string };
+  items: Array<{
+    id: number;
+    catalogItemId: number;
+    itemNameSnapshot: string;
+    unitPriceSnapshot: Prisma.Decimal;
+    quantity: number;
+    lineTotal: Prisma.Decimal;
+  }>;
+}) {
+  return {
+    id: order.id,
+    status: order.status,
+    paymentStatus: order.paymentStatus,
+    paymentReference: order.paymentReference,
+    paidAt: order.paidAt ? order.paidAt.toISOString() : null,
+    rejectionReason: order.rejectionReason,
+    totalAmount: Number(order.totalAmount).toFixed(2),
+    createdAt: order.createdAt.toISOString(),
+    updatedAt: order.updatedAt.toISOString(),
+    customer: {
+      id: order.user.id,
+      email: order.user.email,
+      fullName: order.user.fullName,
+    },
+    items: order.items.map((item) => ({
+      id: item.id,
+      catalogItemId: item.catalogItemId,
+      itemName: item.itemNameSnapshot,
+      unitPrice: Number(item.unitPriceSnapshot).toFixed(2),
+      quantity: item.quantity,
+      lineTotal: Number(item.lineTotal).toFixed(2),
+    })),
+  };
+}
 
 // Apply operator guard to all operator routes
 operatorRouter.use(requireAuth, requireRole(Role.OPERATOR));
@@ -43,27 +89,7 @@ operatorRouter.get('/orders', async (_req: AuthenticatedRequest, res: Response) 
       },
     });
 
-    const data = orders.map((order) => ({
-      id: order.id,
-      status: order.status,
-      rejectionReason: order.rejectionReason,
-      totalAmount: Number(order.totalAmount).toFixed(2),
-      createdAt: order.createdAt.toISOString(),
-      updatedAt: order.updatedAt.toISOString(),
-      customer: {
-        id: order.user.id,
-        email: order.user.email,
-        fullName: order.user.fullName,
-      },
-      items: order.items.map((item) => ({
-        id: item.id,
-        catalogItemId: item.catalogItemId,
-        itemName: item.itemNameSnapshot,
-        unitPrice: Number(item.unitPriceSnapshot).toFixed(2),
-        quantity: item.quantity,
-        lineTotal: Number(item.lineTotal).toFixed(2),
-      })),
-    }));
+    const data = orders.map(formatOperatorOrder);
 
     res.status(200).json({
       success: true,
@@ -154,27 +180,7 @@ operatorRouter.patch('/orders/:id/accept', async (req: AuthenticatedRequest, res
 
     res.status(200).json({
       success: true,
-      data: {
-        id: updatedOrder.id,
-        status: updatedOrder.status,
-        rejectionReason: updatedOrder.rejectionReason,
-        totalAmount: Number(updatedOrder.totalAmount).toFixed(2),
-        createdAt: updatedOrder.createdAt.toISOString(),
-        updatedAt: updatedOrder.updatedAt.toISOString(),
-        customer: {
-          id: updatedOrder.user.id,
-          email: updatedOrder.user.email,
-          fullName: updatedOrder.user.fullName,
-        },
-        items: updatedOrder.items.map((item) => ({
-          id: item.id,
-          catalogItemId: item.catalogItemId,
-          itemName: item.itemNameSnapshot,
-          unitPrice: Number(item.unitPriceSnapshot).toFixed(2),
-          quantity: item.quantity,
-          lineTotal: Number(item.lineTotal).toFixed(2),
-        })),
-      },
+      data: formatOperatorOrder(updatedOrder),
     });
   } catch (error) {
     console.error('Error accepting order:', error);
@@ -235,11 +241,20 @@ operatorRouter.patch('/orders/:id/reject', async (req: AuthenticatedRequest, res
     }
 
     const rejectedOrder = await prisma.$transaction(async (tx) => {
+      const txOrder = await tx.order.findUnique({ where: { id: orderId } });
+      if (!txOrder || txOrder.status !== OrderStatus.SUBMITTED) {
+        throw new Error('STATE_CONFLICT');
+      }
+
+      const nextPaymentStatus =
+        txOrder.paymentStatus === PaymentStatus.PAID ? PaymentStatus.REFUNDED : txOrder.paymentStatus;
+
       const updated = await tx.order.updateMany({
-        where: { id: orderId, status: OrderStatus.SUBMITTED },
+        where: { id: orderId, status: OrderStatus.SUBMITTED, paymentStatus: txOrder.paymentStatus },
         data: {
           status: OrderStatus.REJECTED,
           rejectionReason: trimmedReason,
+          paymentStatus: nextPaymentStatus,
         },
       });
 
@@ -265,27 +280,7 @@ operatorRouter.patch('/orders/:id/reject', async (req: AuthenticatedRequest, res
 
     res.status(200).json({
       success: true,
-      data: {
-        id: rejectedOrder.id,
-        status: rejectedOrder.status,
-        rejectionReason: rejectedOrder.rejectionReason,
-        totalAmount: Number(rejectedOrder.totalAmount).toFixed(2),
-        createdAt: rejectedOrder.createdAt.toISOString(),
-        updatedAt: rejectedOrder.updatedAt.toISOString(),
-        customer: {
-          id: rejectedOrder.user.id,
-          email: rejectedOrder.user.email,
-          fullName: rejectedOrder.user.fullName,
-        },
-        items: rejectedOrder.items.map((item) => ({
-          id: item.id,
-          catalogItemId: item.catalogItemId,
-          itemName: item.itemNameSnapshot,
-          unitPrice: Number(item.unitPriceSnapshot).toFixed(2),
-          quantity: item.quantity,
-          lineTotal: Number(item.lineTotal).toFixed(2),
-        })),
-      },
+      data: formatOperatorOrder(rejectedOrder),
     });
   } catch (error: any) {
     if (error?.message === 'STATE_CONFLICT') {
