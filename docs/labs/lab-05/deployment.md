@@ -2,7 +2,7 @@
 
 > **CPE 334 Introduction to Software Engineering in the Age of AI Agents**  
 > **Lab 5: Cloud Deployment and CI/CD Pipeline on GCP**  
-> **Team Members:** Panyakorn Lohaviboonsap (67070503424), Ivan Luwongsuwat (67070503449)  
+> **Team Members:** Panyakorn Lohaviboonsap (67070503424), Ivan Luwongsupakit (67070503449)  
 > **Repository:** [`https://github.com/Apuaticguy/cpe334_project1`](https://github.com/Apuaticguy/cpe334_project1)
 
 ---

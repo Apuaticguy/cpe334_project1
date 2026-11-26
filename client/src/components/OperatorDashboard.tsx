@@ -17,7 +17,13 @@ export interface OrderItem {
 
 export interface OperatorOrder {
   id: number;
-  status: 'SUBMITTED' | 'ACCEPTED' | 'CANCELLED';
+  status: 'SUBMITTED' | 'ACCEPTED' | 'READY_FOR_PICKUP' | 'COMPLETED' | 'CANCELLED' | 'REJECTED';
+  paymentStatus?: 'UNPAID' | 'PAID' | 'REFUNDED';
+  paymentReference?: string | null;
+  paidAt?: string | null;
+  readyAt?: string | null;
+  completedAt?: string | null;
+  rejectionReason?: string | null;
   totalAmount: string;
   createdAt: string;
   updatedAt: string;
@@ -25,18 +31,41 @@ export interface OperatorOrder {
   items: OrderItem[];
 }
 
+export interface AdminCatalogItem {
+  id: number;
+  name: string;
+  description: string;
+  unitPrice: string;
+  stockQuantity: number;
+  isActive: boolean;
+}
+
 export interface OperatorDashboardProps {
   token: string;
 }
 
 export default function OperatorDashboard({ token }: OperatorDashboardProps) {
+  const [activeSection, setActiveSection] = useState<'orders' | 'catalog'>('orders');
   const [orders, setOrders] = useState<OperatorOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionLoadingId, setActionLoadingId] = useState<number | null>(null);
   const [feedback, setFeedback] = useState<{ orderId: number; type: 'success' | 'danger'; message: string } | null>(null);
   const [expandedOrderId, setExpandedOrderId] = useState<number | null>(null);
-  const [filterStatus, setFilterStatus] = useState<'ALL' | 'SUBMITTED' | 'ACCEPTED'>('ALL');
+  const [filterStatus, setFilterStatus] = useState<'ALL' | 'SUBMITTED' | 'ACCEPTED' | 'READY_FOR_PICKUP' | 'COMPLETED' | 'REJECTED'>('ALL');
+  const [rejectingOrderId, setRejectingOrderId] = useState<number | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
+
+  // F-06 Catalog Administration state
+  const [catalogItems, setCatalogItems] = useState<AdminCatalogItem[]>([]);
+  const [catalogLoading, setCatalogLoading] = useState(false);
+  const [catalogFeedback, setCatalogFeedback] = useState<{ type: 'success' | 'danger'; message: string } | null>(null);
+  const [newName, setNewName] = useState('');
+  const [newDesc, setNewDesc] = useState('');
+  const [newPrice, setNewPrice] = useState('');
+  const [newStock, setNewStock] = useState('');
+  const [submittingCatalog, setSubmittingCatalog] = useState(false);
+  const [editDrafts, setEditDrafts] = useState<Record<number, { unitPrice: string; stockQuantity: string }>>({});
 
   const fetchOrders = async () => {
     setLoading(true);
@@ -60,6 +89,113 @@ export default function OperatorDashboard({ token }: OperatorDashboardProps) {
   useEffect(() => {
     fetchOrders();
   }, [token]);
+
+  const fetchCatalog = async () => {
+    setCatalogLoading(true);
+    setCatalogFeedback(null);
+    try {
+      const res = await fetch('/api/operator/catalog', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        throw new Error(json.error?.message || 'Failed to load catalog items');
+      }
+      const list: AdminCatalogItem[] = json.data || [];
+      setCatalogItems(list);
+      const drafts: Record<number, { unitPrice: string; stockQuantity: string }> = {};
+      list.forEach((item) => {
+        drafts[item.id] = { unitPrice: item.unitPrice, stockQuantity: String(item.stockQuantity) };
+      });
+      setEditDrafts(drafts);
+    } catch (err: any) {
+      setCatalogFeedback({ type: 'danger', message: err.message || 'Failed to load catalog items' });
+    } finally {
+      setCatalogLoading(false);
+    }
+  };
+
+  const handleSwitchSection = (section: 'orders' | 'catalog') => {
+    setActiveSection(section);
+    if (section === 'catalog') {
+      fetchCatalog();
+    }
+  };
+
+  const handleCreateCatalogItem = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCatalogFeedback(null);
+    const parsedPrice = parseFloat(newPrice);
+    const parsedStock = parseInt(newStock, 10);
+
+    if (!newName.trim() || !newDesc.trim() || isNaN(parsedPrice) || parsedPrice <= 0 || isNaN(parsedStock) || parsedStock < 0) {
+      setCatalogFeedback({ type: 'danger', message: 'Please provide valid name, description, unit price > 0, and stock >= 0.' });
+      return;
+    }
+
+    setSubmittingCatalog(true);
+    try {
+      const res = await fetch('/api/operator/catalog', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: newName.trim(),
+          description: newDesc.trim(),
+          unitPrice: parsedPrice,
+          stockQuantity: parsedStock,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        throw new Error(json.error?.message || 'Failed to create catalog item');
+      }
+      const created: AdminCatalogItem = json.data;
+      setCatalogItems((prev) => [...prev, created]);
+      setEditDrafts((prev) => ({
+        ...prev,
+        [created.id]: { unitPrice: created.unitPrice, stockQuantity: String(created.stockQuantity) },
+      }));
+      setNewName('');
+      setNewDesc('');
+      setNewPrice('');
+      setNewStock('');
+      setCatalogFeedback({ type: 'success', message: `Added "${created.name}" to catalog.` });
+    } catch (err: any) {
+      setCatalogFeedback({ type: 'danger', message: err.message || 'Error creating catalog item' });
+    } finally {
+      setSubmittingCatalog(false);
+    }
+  };
+
+  const handleUpdateCatalogItem = async (itemId: number, updates: { unitPrice?: number; stockQuantity?: number; isActive?: boolean }) => {
+    setCatalogFeedback(null);
+    try {
+      const res = await fetch(`/api/operator/catalog/${itemId}`, {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updates),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        throw new Error(json.error?.message || 'Failed to update catalog item');
+      }
+      const updated: AdminCatalogItem = json.data;
+      setCatalogItems((prev) => prev.map((i) => (i.id === itemId ? updated : i)));
+      setEditDrafts((prev) => ({
+        ...prev,
+        [itemId]: { unitPrice: updated.unitPrice, stockQuantity: String(updated.stockQuantity) },
+      }));
+      setCatalogFeedback({ type: 'success', message: `Updated "${updated.name}".` });
+    } catch (err: any) {
+      setCatalogFeedback({ type: 'danger', message: err.message || 'Error updating catalog item' });
+    }
+  };
 
   const handleAcceptOrder = async (orderId: number) => {
     setActionLoadingId(orderId);
@@ -105,6 +241,114 @@ export default function OperatorDashboard({ token }: OperatorDashboardProps) {
     }
   };
 
+  const handleRejectOrder = async (orderId: number) => {
+    const trimmed = rejectReason.trim();
+    if (!trimmed) {
+      setFeedback({
+        orderId,
+        type: 'danger',
+        message: 'Please provide a rejection reason before confirming.',
+      });
+      return;
+    }
+
+    setActionLoadingId(orderId);
+    setFeedback(null);
+
+    try {
+      const res = await fetch(`/api/operator/orders/${orderId}/reject`, {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ reason: trimmed }),
+      });
+
+      const json = await res.json();
+      if (!res.ok) {
+        throw new Error(json.error?.message || `Failed to reject Order #${orderId}`);
+      }
+
+      const updatedOrder: OperatorOrder = json.data;
+      setOrders((prev) =>
+        prev.map((o) =>
+          o.id === orderId
+            ? { ...o, status: updatedOrder.status, rejectionReason: updatedOrder.rejectionReason, updatedAt: updatedOrder.updatedAt }
+            : o
+        )
+      );
+      setRejectingOrderId(null);
+      setRejectReason('');
+      setFeedback({
+        orderId,
+        type: 'success',
+        message: `Order #${orderId} rejected and item stock restored.`,
+      });
+    } catch (err: any) {
+      setFeedback({
+        orderId,
+        type: 'danger',
+        message: err.message || `An error occurred while rejecting Order #${orderId}`,
+      });
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  const handleFulfillmentTransition = async (orderId: number, action: 'ready' | 'complete') => {
+    setActionLoadingId(orderId);
+    setFeedback(null);
+
+    try {
+      const res = await fetch(`/api/operator/orders/${orderId}/${action}`, {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const json = await res.json();
+
+      if (!res.ok) {
+        throw new Error(json.error?.message || `Failed to update fulfillment status for Order #${orderId}`);
+      }
+
+      const updatedOrder: OperatorOrder = json.data;
+      setOrders((prev) =>
+        prev.map((o) =>
+          o.id === orderId
+            ? {
+                ...o,
+                status: updatedOrder.status,
+                readyAt: updatedOrder.readyAt,
+                completedAt: updatedOrder.completedAt,
+                updatedAt: updatedOrder.updatedAt,
+              }
+            : o
+        )
+      );
+
+      setFeedback({
+        orderId,
+        type: 'success',
+        message:
+          action === 'ready'
+            ? `Order #${orderId} marked ready for pickup.`
+            : `Order #${orderId} has been marked completed.`,
+      });
+    } catch (err: any) {
+      setFeedback({
+        orderId,
+        type: 'danger',
+        message: err.message || `An error occurred while updating Order #${orderId}`,
+      });
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
   const toggleExpand = (id: number) => {
     setExpandedOrderId(expandedOrderId === id ? null : id);
   };
@@ -123,10 +367,28 @@ export default function OperatorDashboard({ token }: OperatorDashboardProps) {
             <i className="bi bi-check2-circle me-1"></i>ACCEPTED
           </span>
         );
+      case 'READY_FOR_PICKUP':
+        return (
+          <span className="badge bg-primary">
+            <i className="bi bi-bag-check me-1"></i>READY_FOR_PICKUP
+          </span>
+        );
+      case 'COMPLETED':
+        return (
+          <span className="badge bg-dark">
+            <i className="bi bi-patch-check-fill me-1"></i>COMPLETED
+          </span>
+        );
       case 'CANCELLED':
         return (
           <span className="badge bg-secondary">
             <i className="bi bi-x-circle me-1"></i>CANCELLED
+          </span>
+        );
+      case 'REJECTED':
+        return (
+          <span className="badge bg-danger">
+            <i className="bi bi-x-octagon me-1"></i>REJECTED
           </span>
         );
       default:
@@ -142,6 +404,9 @@ export default function OperatorDashboard({ token }: OperatorDashboardProps) {
 
   const totalSubmitted = orders.filter((o) => o.status === 'SUBMITTED').length;
   const totalAccepted = orders.filter((o) => o.status === 'ACCEPTED').length;
+  const totalReady = orders.filter((o) => o.status === 'READY_FOR_PICKUP').length;
+  const totalCompleted = orders.filter((o) => o.status === 'COMPLETED').length;
+  const totalRejected = orders.filter((o) => o.status === 'REJECTED').length;
 
   if (loading) {
     return (
@@ -168,6 +433,200 @@ export default function OperatorDashboard({ token }: OperatorDashboardProps) {
 
   return (
     <div className="my-4">
+      {/* Top Operator Navigation Tabs */}
+      <div className="d-flex gap-2 mb-3 border-bottom pb-2">
+        <button
+          type="button"
+          className={`btn btn-sm fw-semibold ${activeSection === 'orders' ? 'btn-primary' : 'btn-outline-secondary'}`}
+          onClick={() => handleSwitchSection('orders')}
+        >
+          <i className="bi bi-inbox-fill me-1"></i> Order Queue
+        </button>
+        <button
+          type="button"
+          className={`btn btn-sm fw-semibold ${activeSection === 'catalog' ? 'btn-primary' : 'btn-outline-secondary'}`}
+          onClick={() => handleSwitchSection('catalog')}
+        >
+          <i className="bi bi-box-seam me-1"></i> Manage Catalog
+        </button>
+      </div>
+
+      {activeSection === 'catalog' ? (
+        <div>
+          <div className="d-flex justify-content-between align-items-center mb-3">
+            <div>
+              <h3 className="h4 fw-bold mb-1">
+                <i className="bi bi-box-seam me-2 text-primary"></i>Catalog &amp; Inventory Administration
+              </h3>
+              <p className="text-muted small mb-0">
+                Create catalog items, adjust pricing, and restock inventory without modifying historical order snapshots.
+              </p>
+            </div>
+            <button type="button" className="btn btn-outline-secondary btn-sm" onClick={fetchCatalog}>
+              <i className="bi bi-arrow-clockwise me-1"></i> Refresh Catalog
+            </button>
+          </div>
+
+          {catalogFeedback && (
+            <div className={`alert alert-${catalogFeedback.type} py-2 small`} role="alert">
+              {catalogFeedback.message}
+            </div>
+          )}
+
+          {/* Create New Item Form */}
+          <div className="card border-0 shadow-sm mb-4">
+            <div className="card-header bg-white fw-semibold py-2">Add New Catalog Item</div>
+            <div className="card-body">
+              <form onSubmit={handleCreateCatalogItem} className="row g-2 align-items-end">
+                <div className="col-12 col-md-3">
+                  <label htmlFor="cat-item-name" className="form-label small fw-semibold mb-1">Item Name</label>
+                  <input
+                    id="cat-item-name"
+                    type="text"
+                    className="form-control form-control-sm"
+                    value={newName}
+                    onChange={(e) => setNewName(e.target.value)}
+                    placeholder="e.g. Thai Iced Tea"
+                    required
+                  />
+                </div>
+                <div className="col-12 col-md-4">
+                  <label htmlFor="cat-item-desc" className="form-label small fw-semibold mb-1">Description</label>
+                  <input
+                    id="cat-item-desc"
+                    type="text"
+                    className="form-control form-control-sm"
+                    value={newDesc}
+                    onChange={(e) => setNewDesc(e.target.value)}
+                    placeholder="Freshly brewed tea"
+                    required
+                  />
+                </div>
+                <div className="col-6 col-md-2">
+                  <label htmlFor="cat-item-price" className="form-label small fw-semibold mb-1">Unit Price ($)</label>
+                  <input
+                    id="cat-item-price"
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    className="form-control form-control-sm"
+                    value={newPrice}
+                    onChange={(e) => setNewPrice(e.target.value)}
+                    placeholder="4.50"
+                    required
+                  />
+                </div>
+                <div className="col-6 col-md-1">
+                  <label htmlFor="cat-item-stock" className="form-label small fw-semibold mb-1">Stock Quantity</label>
+                  <input
+                    id="cat-item-stock"
+                    type="number"
+                    min="0"
+                    className="form-control form-control-sm"
+                    value={newStock}
+                    onChange={(e) => setNewStock(e.target.value)}
+                    placeholder="20"
+                    required
+                  />
+                </div>
+                <div className="col-12 col-md-2">
+                  <button type="submit" className="btn btn-primary btn-sm w-100 fw-semibold" disabled={submittingCatalog}>
+                    {submittingCatalog ? 'Adding...' : 'Add Catalog Item'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+
+          {/* Inventory List */}
+          <div className="card border-0 shadow-sm overflow-hidden">
+            <div className="table-responsive">
+              <table className="table table-hover align-middle mb-0">
+                <thead className="table-light">
+                  <tr>
+                    <th>ID</th>
+                    <th>Item</th>
+                    <th style={{ width: '130px' }}>Price ($)</th>
+                    <th style={{ width: '120px' }}>Stock</th>
+                    <th className="text-center">Status</th>
+                    <th className="text-end">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {catalogLoading ? (
+                    <tr><td colSpan={6} className="text-center py-4 text-muted">Loading catalog...</td></tr>
+                  ) : catalogItems.map((item) => {
+                    const draft = editDrafts[item.id] || { unitPrice: item.unitPrice, stockQuantity: String(item.stockQuantity) };
+                    return (
+                      <tr key={item.id}>
+                        <td className="fw-bold">#{item.id}</td>
+                        <td>
+                          <div className="fw-semibold">{item.name}</div>
+                          <div className="text-muted small">{item.description}</div>
+                        </td>
+                        <td>
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0.01"
+                            className="form-control form-control-sm"
+                            aria-label={`Price for ${item.name}`}
+                            value={draft.unitPrice}
+                            onChange={(e) => setEditDrafts((prev) => ({
+                              ...prev,
+                              [item.id]: { ...draft, unitPrice: e.target.value },
+                            }))}
+                          />
+                        </td>
+                        <td>
+                          <input
+                            type="number"
+                            min="0"
+                            className="form-control form-control-sm"
+                            aria-label={`Stock for ${item.name}`}
+                            value={draft.stockQuantity}
+                            onChange={(e) => setEditDrafts((prev) => ({
+                              ...prev,
+                              [item.id]: { ...draft, stockQuantity: e.target.value },
+                            }))}
+                          />
+                        </td>
+                        <td className="text-center">
+                          <span className={`badge ${item.isActive ? 'bg-success' : 'bg-secondary'}`}>
+                            {item.isActive ? 'ACTIVE' : 'INACTIVE'}
+                          </span>
+                        </td>
+                        <td className="text-end">
+                          <div className="d-flex justify-content-end gap-2">
+                            <button
+                              type="button"
+                              className="btn btn-outline-primary btn-sm"
+                              onClick={() => handleUpdateCatalogItem(item.id, {
+                                unitPrice: parseFloat(draft.unitPrice),
+                                stockQuantity: parseInt(draft.stockQuantity, 10),
+                              })}
+                            >
+                              Save
+                            </button>
+                            <button
+                              type="button"
+                              className={`btn btn-sm ${item.isActive ? 'btn-outline-warning' : 'btn-outline-success'}`}
+                              onClick={() => handleUpdateCatalogItem(item.id, { isActive: !item.isActive })}
+                            >
+                              {item.isActive ? 'Deactivate' : 'Activate'}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <>
       {/* Header and Controls */}
       <div className="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
         <div>
@@ -175,7 +634,7 @@ export default function OperatorDashboard({ token }: OperatorDashboardProps) {
             <i className="bi bi-inbox-fill me-2 text-primary"></i>Operator Order Queue
           </h3>
           <p className="text-muted small mb-0">
-            Authoritative order queue management and atomic status transitions (SUBMITTED &rarr; ACCEPTED)
+            Authoritative order queue management and atomic status transitions (SUBMITTED &rarr; ACCEPTED &rarr; READY_FOR_PICKUP &rarr; COMPLETED)
           </p>
         </div>
         <button className="btn btn-outline-secondary btn-sm align-self-start align-self-md-auto" onClick={fetchOrders}>
@@ -241,7 +700,7 @@ export default function OperatorDashboard({ token }: OperatorDashboardProps) {
       )}
 
       {/* Filter Tabs */}
-      <div className="d-flex gap-2 mb-3">
+      <div className="d-flex flex-wrap gap-2 mb-3">
         <button
           className={`btn btn-sm ${filterStatus === 'ALL' ? 'btn-primary' : 'btn-outline-secondary'}`}
           onClick={() => setFilterStatus('ALL')}
@@ -259,6 +718,24 @@ export default function OperatorDashboard({ token }: OperatorDashboardProps) {
           onClick={() => setFilterStatus('ACCEPTED')}
         >
           Accepted ({totalAccepted})
+        </button>
+        <button
+          className={`btn btn-sm ${filterStatus === 'READY_FOR_PICKUP' ? 'btn-primary' : 'btn-outline-secondary'}`}
+          onClick={() => setFilterStatus('READY_FOR_PICKUP')}
+        >
+          Ready for Pickup ({totalReady})
+        </button>
+        <button
+          className={`btn btn-sm ${filterStatus === 'COMPLETED' ? 'btn-dark' : 'btn-outline-secondary'}`}
+          onClick={() => setFilterStatus('COMPLETED')}
+        >
+          Completed ({totalCompleted})
+        </button>
+        <button
+          className={`btn btn-sm ${filterStatus === 'REJECTED' ? 'btn-danger' : 'btn-outline-secondary'}`}
+          onClick={() => setFilterStatus('REJECTED')}
+        >
+          Rejected ({totalRejected})
         </button>
       </div>
 
@@ -304,7 +781,27 @@ export default function OperatorDashboard({ token }: OperatorDashboardProps) {
                       </td>
                       <td className="small text-muted">{formattedDate}</td>
                       <td className="text-end fw-bold text-primary">${order.totalAmount}</td>
-                      <td className="text-center">{getStatusBadge(order.status)}</td>
+                      <td className="text-center">
+                        {getStatusBadge(order.status)}
+                        {order.paymentStatus && (
+                          <div className="mt-1">
+                            <span
+                              className={`badge ${
+                                order.paymentStatus === 'PAID'
+                                  ? 'bg-info text-dark'
+                                  : order.paymentStatus === 'REFUNDED'
+                                    ? 'bg-warning text-dark'
+                                    : 'bg-light text-dark border'
+                              }`}
+                            >
+                              {order.paymentStatus}
+                            </span>
+                          </div>
+                        )}
+                        {order.status === 'REJECTED' && order.rejectionReason && (
+                          <div className="small text-danger mt-1">{order.rejectionReason}</div>
+                        )}
+                      </td>
                       <td className="text-end">
                         <div className="d-flex justify-content-end align-items-center gap-2">
                           <button
@@ -317,32 +814,110 @@ export default function OperatorDashboard({ token }: OperatorDashboardProps) {
                           </button>
 
                           {order.status === 'SUBMITTED' ? (
+                            <>
+                              <button
+                                className="btn btn-success btn-sm fw-semibold"
+                                onClick={() => handleAcceptOrder(order.id)}
+                                disabled={isActionLoading}
+                              >
+                                {isActionLoading ? (
+                                  <>
+                                    <span className="spinner-border spinner-border-sm me-1" role="status"></span>
+                                    Accepting...
+                                  </>
+                                ) : (
+                                  <>
+                                    <i className="bi bi-check-lg me-1"></i> Accept Order
+                                  </>
+                                )}
+                              </button>
+                              <button
+                                type="button"
+                                className="btn btn-outline-danger btn-sm fw-semibold"
+                                onClick={() => {
+                                  setRejectingOrderId(rejectingOrderId === order.id ? null : order.id);
+                                  setRejectReason('');
+                                }}
+                                disabled={isActionLoading}
+                              >
+                                <i className="bi bi-x-octagon me-1"></i> Reject Order
+                              </button>
+                            </>
+                          ) : order.status === 'ACCEPTED' ? (
                             <button
-                              className="btn btn-success btn-sm fw-semibold"
-                              onClick={() => handleAcceptOrder(order.id)}
+                              type="button"
+                              className="btn btn-primary btn-sm fw-semibold"
+                              onClick={() => handleFulfillmentTransition(order.id, 'ready')}
                               disabled={isActionLoading}
                             >
                               {isActionLoading ? (
                                 <>
                                   <span className="spinner-border spinner-border-sm me-1" role="status"></span>
-                                  Accepting...
+                                  Updating...
                                 </>
                               ) : (
                                 <>
-                                  <i className="bi bi-check-lg me-1"></i> Accept Order
+                                  <i className="bi bi-bag-check me-1"></i> Mark Ready
                                 </>
                               )}
+                            </button>
+                          ) : order.status === 'READY_FOR_PICKUP' ? (
+                            <button
+                              type="button"
+                              className="btn btn-dark btn-sm fw-semibold"
+                              onClick={() => handleFulfillmentTransition(order.id, 'complete')}
+                              disabled={isActionLoading}
+                            >
+                              {isActionLoading ? (
+                                <>
+                                  <span className="spinner-border spinner-border-sm me-1" role="status"></span>
+                                  Completing...
+                                </>
+                              ) : (
+                                <>
+                                  <i className="bi bi-patch-check-fill me-1"></i> Complete Order
+                                </>
+                              )}
+                            </button>
+                          ) : order.status === 'COMPLETED' ? (
+                            <button className="btn btn-light btn-sm text-dark border disabled" disabled>
+                              <i className="bi bi-patch-check-fill me-1"></i> Completed
                             </button>
                           ) : order.status === 'CANCELLED' ? (
                             <button className="btn btn-light btn-sm text-secondary border disabled" disabled>
                               <i className="bi bi-x-circle me-1"></i> Cancelled
                             </button>
                           ) : (
-                            <button className="btn btn-light btn-sm text-success border disabled" disabled>
-                              <i className="bi bi-check2-all me-1"></i> Accepted
+                            <button className="btn btn-light btn-sm text-danger border disabled" disabled>
+                              <i className="bi bi-x-octagon me-1"></i> Rejected
                             </button>
                           )}
                         </div>
+                        {rejectingOrderId === order.id && order.status === 'SUBMITTED' && (
+                          <div className="mt-2 p-2 bg-light border rounded text-start">
+                            <label htmlFor={`reject-reason-${order.id}`} className="form-label small fw-semibold mb-1">
+                              Rejection Reason
+                            </label>
+                            <div className="d-flex gap-2">
+                              <input
+                                id={`reject-reason-${order.id}`}
+                                type="text"
+                                className="form-control form-control-sm"
+                                placeholder="Reason for rejecting order..."
+                                value={rejectReason}
+                                onChange={(e) => setRejectReason(e.target.value)}
+                              />
+                              <button
+                                type="button"
+                                className="btn btn-danger btn-sm text-nowrap"
+                                onClick={() => handleRejectOrder(order.id)}
+                                disabled={isActionLoading}
+                              >
+                                Confirm Reject
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   );
@@ -398,6 +973,8 @@ export default function OperatorDashboard({ token }: OperatorDashboardProps) {
             );
           })()}
         </div>
+      )}
+        </>
       )}
     </div>
   );

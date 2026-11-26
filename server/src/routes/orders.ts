@@ -1,9 +1,58 @@
 import { Router, Response } from 'express';
-import { Prisma, OrderStatus, Role } from '@prisma/client';
+import { Prisma, OrderStatus, PaymentStatus, Role } from '@prisma/client';
 import { prisma } from '../prisma.js';
 import { requireAuth, AuthenticatedRequest } from '../middleware/auth.js';
 
 export const ordersRouter = Router();
+
+function formatCustomerOrder(
+  order: {
+    id: number;
+    userId: number;
+    status: OrderStatus;
+    paymentStatus: PaymentStatus;
+    paymentReference: string | null;
+    paidAt: Date | null;
+    readyAt: Date | null;
+    completedAt: Date | null;
+    rejectionReason: string | null;
+    totalAmount: Prisma.Decimal;
+    createdAt: Date;
+    updatedAt: Date;
+    items: Array<{
+      id: number;
+      catalogItemId: number;
+      itemNameSnapshot: string;
+      unitPriceSnapshot: Prisma.Decimal;
+      quantity: number;
+      lineTotal: Prisma.Decimal;
+    }>;
+  },
+  includeUserId = false
+) {
+  return {
+    id: order.id,
+    ...(includeUserId ? { userId: order.userId } : {}),
+    status: order.status,
+    paymentStatus: order.paymentStatus,
+    paymentReference: order.paymentReference,
+    paidAt: order.paidAt ? order.paidAt.toISOString() : null,
+    readyAt: order.readyAt ? order.readyAt.toISOString() : null,
+    completedAt: order.completedAt ? order.completedAt.toISOString() : null,
+    rejectionReason: order.rejectionReason,
+    totalAmount: Number(order.totalAmount).toFixed(2),
+    createdAt: order.createdAt.toISOString(),
+    updatedAt: order.updatedAt.toISOString(),
+    items: order.items.map((item) => ({
+      id: item.id,
+      catalogItemId: item.catalogItemId,
+      itemName: item.itemNameSnapshot,
+      unitPrice: Number(item.unitPriceSnapshot).toFixed(2),
+      quantity: item.quantity,
+      lineTotal: Number(item.lineTotal).toFixed(2)
+    }))
+  };
+}
 
 // POST /api/orders - Create a new order with authoritative price calculation
 ordersRouter.post('/', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
@@ -138,19 +187,7 @@ ordersRouter.post('/', requireAuth, async (req: AuthenticatedRequest, res: Respo
 
     res.status(201).json({
       success: true,
-      data: {
-        id: createdOrder.id,
-        status: createdOrder.status,
-        totalAmount: Number(createdOrder.totalAmount).toFixed(2),
-        createdAt: createdOrder.createdAt.toISOString(),
-        items: createdOrder.items.map((i) => ({
-          catalogItemId: i.catalogItemId,
-          itemName: i.itemNameSnapshot,
-          unitPrice: Number(i.unitPriceSnapshot).toFixed(2),
-          quantity: i.quantity,
-          lineTotal: Number(i.lineTotal).toFixed(2)
-        }))
-      }
+      data: formatCustomerOrder(createdOrder)
     });
   } catch (error) {
     console.error('Order creation error:', error);
@@ -181,21 +218,7 @@ ordersRouter.get('/my-orders', requireAuth, async (req: AuthenticatedRequest, re
       }
     });
 
-    const data = orders.map((order) => ({
-      id: order.id,
-      status: order.status,
-      totalAmount: Number(order.totalAmount).toFixed(2),
-      createdAt: order.createdAt.toISOString(),
-      updatedAt: order.updatedAt.toISOString(),
-      items: order.items.map((item) => ({
-        id: item.id,
-        catalogItemId: item.catalogItemId,
-        itemName: item.itemNameSnapshot,
-        unitPrice: Number(item.unitPriceSnapshot).toFixed(2),
-        quantity: item.quantity,
-        lineTotal: Number(item.lineTotal).toFixed(2)
-      }))
-    }));
+    const data = orders.map((order) => formatCustomerOrder(order));
 
     res.status(200).json({
       success: true,
@@ -258,22 +281,7 @@ ordersRouter.get('/:id', requireAuth, async (req: AuthenticatedRequest, res: Res
 
     res.status(200).json({
       success: true,
-      data: {
-        id: order.id,
-        userId: order.userId,
-        status: order.status,
-        totalAmount: Number(order.totalAmount).toFixed(2),
-        createdAt: order.createdAt.toISOString(),
-        updatedAt: order.updatedAt.toISOString(),
-        items: order.items.map((item) => ({
-          id: item.id,
-          catalogItemId: item.catalogItemId,
-          itemName: item.itemNameSnapshot,
-          unitPrice: Number(item.unitPriceSnapshot).toFixed(2),
-          quantity: item.quantity,
-          lineTotal: Number(item.lineTotal).toFixed(2)
-        }))
-      }
+      data: formatCustomerOrder(order, true)
     });
   } catch (error) {
     console.error('Error fetching order detail:', error);
@@ -340,11 +348,19 @@ ordersRouter.patch('/:id/cancel', requireAuth, async (req: AuthenticatedRequest,
       return;
     }
 
-    // Atomic state update + inventory restoration inside single database transaction
+    // Atomic state update + payment refund (if PAID) + inventory restoration inside single database transaction
     const cancelledOrder = await prisma.$transaction(async (tx) => {
+      const txOrder = await tx.order.findUnique({ where: { id: orderId } });
+      if (!txOrder || txOrder.status !== OrderStatus.SUBMITTED) {
+        throw new Error('ORDER_NOT_CANCELLABLE');
+      }
+
+      const nextPaymentStatus =
+        txOrder.paymentStatus === PaymentStatus.PAID ? PaymentStatus.REFUNDED : txOrder.paymentStatus;
+
       const updated = await tx.order.updateMany({
-        where: { id: orderId, status: OrderStatus.SUBMITTED },
-        data: { status: OrderStatus.CANCELLED }
+        where: { id: orderId, status: OrderStatus.SUBMITTED, paymentStatus: txOrder.paymentStatus },
+        data: { status: OrderStatus.CANCELLED, paymentStatus: nextPaymentStatus }
       });
 
       if (updated.count !== 1) {
@@ -366,21 +382,7 @@ ordersRouter.patch('/:id/cancel', requireAuth, async (req: AuthenticatedRequest,
 
     res.status(200).json({
       success: true,
-      data: {
-        id: cancelledOrder.id,
-        status: cancelledOrder.status,
-        totalAmount: Number(cancelledOrder.totalAmount).toFixed(2),
-        createdAt: cancelledOrder.createdAt.toISOString(),
-        updatedAt: cancelledOrder.updatedAt.toISOString(),
-        items: cancelledOrder.items.map((item) => ({
-          id: item.id,
-          catalogItemId: item.catalogItemId,
-          itemName: item.itemNameSnapshot,
-          unitPrice: Number(item.unitPriceSnapshot).toFixed(2),
-          quantity: item.quantity,
-          lineTotal: Number(item.lineTotal).toFixed(2)
-        }))
-      }
+      data: formatCustomerOrder(cancelledOrder)
     });
   } catch (error: any) {
     if (error?.message === 'ORDER_NOT_CANCELLABLE') {
@@ -397,6 +399,114 @@ ordersRouter.patch('/:id/cancel', requireAuth, async (req: AuthenticatedRequest,
     res.status(500).json({
       success: false,
       error: { code: 'INTERNAL_ERROR', message: 'Failed to cancel order' }
+    });
+  }
+});
+
+// POST /api/orders/:id/pay - Simulated payment checkout for owning CUSTOMER on active UNPAID order (F-08)
+ordersRouter.post('/:id/pay', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    const userRole = req.user?.role;
+    if (!userId) {
+      res.status(401).json({
+        success: false,
+        error: { code: 'UNAUTHORIZED', message: 'Authentication required' }
+      });
+      return;
+    }
+
+    const orderId = parseInt(req.params.id, 10);
+    if (isNaN(orderId) || orderId <= 0) {
+      res.status(400).json({
+        success: false,
+        error: { code: 'INVALID_ID', message: 'Invalid order ID' }
+      });
+      return;
+    }
+
+    const existingOrder = await prisma.order.findUnique({
+      where: { id: orderId },
+      include: { items: true }
+    });
+
+    if (!existingOrder) {
+      res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message: `Order #${orderId} not found` }
+      });
+      return;
+    }
+
+    // AC-S2-12: Only owning CUSTOMER may pay for an order
+    if (userRole !== Role.CUSTOMER || existingOrder.userId !== userId) {
+      res.status(403).json({
+        success: false,
+        error: { code: 'FORBIDDEN', message: 'Only the owning customer may pay for this order' }
+      });
+      return;
+    }
+
+    // AC-S2-11: Order must be UNPAID and not CANCELLED or REJECTED
+    const isActiveOrder =
+      existingOrder.status === OrderStatus.SUBMITTED || existingOrder.status === OrderStatus.ACCEPTED;
+    if (existingOrder.paymentStatus !== PaymentStatus.UNPAID || !isActiveOrder) {
+      res.status(409).json({
+        success: false,
+        error: {
+          code: 'ORDER_NOT_PAYABLE',
+          message: `Order #${orderId} cannot be paid (status=${existingOrder.status}, paymentStatus=${existingOrder.paymentStatus})`
+        }
+      });
+      return;
+    }
+
+    const paidAt = new Date();
+    const paymentReference = `PAY-${orderId}-${paidAt.getTime()}`;
+
+    const paidOrder = await prisma.$transaction(async (tx) => {
+      const updated = await tx.order.updateMany({
+        where: {
+          id: orderId,
+          paymentStatus: PaymentStatus.UNPAID,
+          status: { in: [OrderStatus.SUBMITTED, OrderStatus.ACCEPTED] }
+        },
+        data: {
+          paymentStatus: PaymentStatus.PAID,
+          paymentReference,
+          paidAt
+        }
+      });
+
+      if (updated.count !== 1) {
+        throw new Error('ORDER_NOT_PAYABLE');
+      }
+
+      return tx.order.findUniqueOrThrow({
+        where: { id: orderId },
+        include: { items: true }
+      });
+    });
+
+    res.status(200).json({
+      success: true,
+      data: formatCustomerOrder(paidOrder)
+    });
+  } catch (error: any) {
+    if (error?.message === 'ORDER_NOT_PAYABLE') {
+      res.status(409).json({
+        success: false,
+        error: {
+          code: 'ORDER_NOT_PAYABLE',
+          message: 'Order is no longer eligible for payment'
+        }
+      });
+      return;
+    }
+    console.error('Error processing payment:', error);
+    res.status(500).json({
+      success: false,
+      error: { code: 'INTERNAL_ERROR', message: 'Failed to process simulated payment' }
     });
   }
 });

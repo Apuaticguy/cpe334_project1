@@ -218,4 +218,204 @@ describe('OperatorDashboard Component Tests (Feature 4)', () => {
 
     expect(screen.getByText(/There are currently no customer orders placed in the system/i)).toBeInTheDocument();
   });
+
+  // TEST-S2-13 / AC-S2-01 (Sprint 2 F-06): Catalog Administration UI
+  it('[TEST-S2-13 / AC-S2-01] switches to Manage Catalog tab and submits POST /api/operator/catalog to create an item', async () => {
+    const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      if (url === '/api/operator/orders') {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ success: true, data: mockOrders }),
+        });
+      }
+      if (url === '/api/operator/catalog' && (!init?.method || init.method === 'GET')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            success: true,
+            data: [
+              { id: 1, name: 'Iced Matcha Latte', description: 'Matcha', unitPrice: '4.50', stockQuantity: 50, isActive: true },
+            ],
+          }),
+        });
+      }
+      if (url === '/api/operator/catalog' && init?.method === 'POST') {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            success: true,
+            data: { id: 9, name: 'Thai Iced Tea', description: 'Sweet tea', unitPrice: '4.25', stockQuantity: 15, isActive: true },
+          }),
+        });
+      }
+      return Promise.reject(new Error(`Unexpected URL: ${url}`));
+    });
+    global.fetch = fetchMock as any;
+
+    render(<OperatorDashboard token={dummyToken} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('#101')).toBeInTheDocument();
+    });
+
+    // Switch to Manage Catalog tab
+    const catalogTabBtn = screen.getByRole('button', { name: /manage catalog/i });
+    fireEvent.click(catalogTabBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText('Iced Matcha Latte')).toBeInTheDocument();
+    });
+
+    // Fill Add Item form
+    fireEvent.change(screen.getByLabelText(/item name/i), { target: { value: 'Thai Iced Tea' } });
+    fireEvent.change(screen.getByLabelText(/description/i), { target: { value: 'Sweet tea' } });
+    fireEvent.change(screen.getByLabelText(/unit price/i), { target: { value: '4.25' } });
+    fireEvent.change(screen.getByLabelText(/stock quantity/i), { target: { value: '15' } });
+
+    fireEvent.click(screen.getByRole('button', { name: /add catalog item/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Thai Iced Tea')).toBeInTheDocument();
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/operator/catalog',
+      expect.objectContaining({ method: 'POST' })
+    );
+  });
+
+  // TEST-S2-13 (F-07) / AC-S2-05: Operator Reject Order with mandatory reason
+  it('[TEST-S2-13 / AC-S2-05] allows operator to reject a SUBMITTED order with reason via PATCH /reject and renders REJECTED', async () => {
+    const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      if (url === '/api/operator/orders') {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ success: true, data: mockOrders }),
+        });
+      }
+      if (url === '/api/operator/orders/101/reject' && init?.method === 'PATCH') {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            success: true,
+            data: {
+              ...mockOrders[0],
+              status: 'REJECTED',
+              rejectionReason: 'Out of matcha powder',
+              updatedAt: '2026-11-26T10:10:00.000Z',
+            },
+          }),
+        });
+      }
+      return Promise.reject(new Error(`Unexpected URL: ${url}`));
+    });
+    global.fetch = fetchMock as any;
+
+    render(<OperatorDashboard token={dummyToken} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('#101')).toBeInTheDocument();
+    });
+
+    const rejectBtn = screen.getByRole('button', { name: /reject order/i });
+    fireEvent.click(rejectBtn);
+
+    const reasonInput = await screen.findByLabelText(/rejection reason/i);
+    fireEvent.change(reasonInput, { target: { value: 'Out of matcha powder' } });
+
+    const confirmRejectBtn = screen.getByRole('button', { name: /confirm reject/i });
+    fireEvent.click(confirmRejectBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText('REJECTED')).toBeInTheDocument();
+      expect(screen.getByText(/Out of matcha powder/i)).toBeInTheDocument();
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/operator/orders/101/reject',
+      expect.objectContaining({
+        method: 'PATCH',
+        headers: expect.objectContaining({
+          Authorization: `Bearer ${dummyToken}`,
+          'Content-Type': 'application/json',
+        }),
+        body: JSON.stringify({ reason: 'Out of matcha powder' }),
+      })
+    );
+  });
+
+  // TEST-S3-04 (Sprint 3 F-09 / AC-S3-01, AC-S3-02): Fulfillment actions Mark Ready & Complete Order
+  it('[TEST-S3-04 / AC-S3-01, AC-S3-02] transitions ACCEPTED -> READY_FOR_PICKUP -> COMPLETED via fulfillment buttons', async () => {
+    const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      if (url === '/api/operator/orders') {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ success: true, data: mockOrders }),
+        });
+      }
+      if (url === '/api/operator/orders/102/ready' && init?.method === 'PATCH') {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            success: true,
+            data: {
+              ...mockOrders[1],
+              status: 'READY_FOR_PICKUP',
+              readyAt: '2026-11-26T16:00:00.000Z',
+              updatedAt: '2026-11-26T16:00:00.000Z',
+            },
+          }),
+        });
+      }
+      if (url === '/api/operator/orders/102/complete' && init?.method === 'PATCH') {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            success: true,
+            data: {
+              ...mockOrders[1],
+              status: 'COMPLETED',
+              readyAt: '2026-11-26T16:00:00.000Z',
+              completedAt: '2026-11-26T16:05:00.000Z',
+              updatedAt: '2026-11-26T16:05:00.000Z',
+            },
+          }),
+        });
+      }
+      return Promise.reject(new Error(`Unexpected URL: ${url}`));
+    });
+    global.fetch = fetchMock as any;
+
+    render(<OperatorDashboard token={dummyToken} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('#102')).toBeInTheDocument();
+    });
+
+    // Order #102 starts as ACCEPTED -> click Mark Ready
+    const readyBtn = screen.getByRole('button', { name: /mark ready/i });
+    fireEvent.click(readyBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText('READY_FOR_PICKUP')).toBeInTheDocument();
+    });
+
+    // Now click Complete Order
+    const completeBtn = screen.getByRole('button', { name: /complete order/i });
+    fireEvent.click(completeBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText('COMPLETED')).toBeInTheDocument();
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/operator/orders/102/ready',
+      expect.objectContaining({ method: 'PATCH' })
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/operator/orders/102/complete',
+      expect.objectContaining({ method: 'PATCH' })
+    );
+  });
 });

@@ -1,10 +1,10 @@
 # Software Requirements Specification (SRS) - QuickOrder
 
-**Document Version:** 1.0.0  
+**Document Version:** 2.0.0 (Deliverable 2 — Lab 6/7 Revisions + Sprint 2 & Sprint 3 Contracts)  
 **Project:** QuickOrder (Theme 4: E-Commerce or Ordering System)  
 **Course:** CPE 334 Software Engineering (Semester 1/2026)  
-**Authors:** Panyakorn Lohaviboonsap (67070503424), Ivan (Apuaticguy)  
-**Status:** Baseline Draft (Pre-Sprint 1)
+**Authors:** Panyakorn Lohaviboonsap (67070503424), Ivan Luwongsupakit (`@Apuaticguy`)  
+**Status:** Deliverable 2 Contract Baseline (Issue #36)
 
 ---
 
@@ -22,8 +22,8 @@ Campus food and merchandise kiosks encounter long wait times, inefficient orderi
 
 | Actor | Responsibilities | Permissions & Access Scope |
 |---|---|---|
-| **Customer** | • Browse available catalog items and live unit prices.<br>• Assemble cart items and submit orders.<br>• View own order history and persisted order details.<br>• Cancel own `SUBMITTED` orders (`SUBMITTED` $\rightarrow$ `CANCELLED`) with automatic stock restoration.<br>• Track order status (`SUBMITTED`, `ACCEPTED`, `CANCELLED`). | • May only access catalog and **own** order records.<br>• Cannot alter authoritative catalog prices.<br>• Cannot modify or cancel another customer's order.<br>• Cannot access operator fulfillment views. |
-| **Operator** | • View live incoming order queue across the kiosk.<br>• Inspect order line items and customer identifiers.<br>• Accept incoming orders (`SUBMITTED` $\rightarrow$ `ACCEPTED`).<br>• In later sprints: manage catalog pricing, inventory stock, and mark orders fulfilled. | • Full access to order processing and fulfillment endpoints.<br>• Cannot place orders masquerading as another customer.<br>• All status changes are logged with operator timestamp. |
+| **Customer** | • Browse available catalog items and live unit prices.<br>• Assemble cart items and submit orders.<br>• View own order history and persisted order details.<br>• Pay for active `UNPAID` orders (`F-08`) and view payment receipt.<br>• Cancel own `SUBMITTED` orders (`SUBMITTED` $\rightarrow$ `CANCELLED`) with automatic stock restoration &amp; refund.<br>• Track order status (`SUBMITTED`, `ACCEPTED`, `CANCELLED`, `REJECTED`, `READY_FOR_PICKUP`, `COMPLETED`). | • May only access catalog and **own** order records.<br>• Cannot alter authoritative catalog prices.<br>• Cannot modify, pay, or cancel another customer's order.<br>• Cannot access operator fulfillment views. |
+| **Operator** | • View live incoming order queue across the kiosk.<br>• Inspect order line items, customer identifiers, and payment status.<br>• Accept (`SUBMITTED` $\rightarrow$ `ACCEPTED`) or reject with reason (`SUBMITTED` $\rightarrow$ `REJECTED`).<br>• Manage catalog items, prices, stock, and active status (`F-06`).<br>• Advance fulfillment (`ACCEPTED` $\rightarrow$ `READY_FOR_PICKUP` $\rightarrow$ `COMPLETED`) (`F-09`). | • Full access to catalog admin, order processing, and fulfillment endpoints.<br>• Cannot place or pay orders as a customer.<br>• All status changes are logged with server timestamps. |
 | **System / Unauthenticated Visitor** | • View system health status.<br>• View public catalog listing (read-only). | • Cannot access protected endpoints without a valid session token.<br>• Unauthenticated requests are rejected with `401 Unauthorized`. |
 
 ---
@@ -58,7 +58,13 @@ Campus food and merchandise kiosks encounter long wait times, inefficient orderi
 * **FR-06 (Operator Order Queue):** The system shall provide an operator view listing all incoming orders in descending chronological order with customer identity, order total, status, and creation timestamp.
 * **FR-07 (Operator Order Acceptance):** The system shall allow operators to transition an order from `SUBMITTED` to `ACCEPTED` and record the transition timestamp.
 * **FR-08 (Session Termination):** The system shall invalidate the active session upon logout and purge client-side session state.
-* **FR-09 (Customer Order Cancellation — Lab 7 Revision):** The system shall allow an authenticated `CUSTOMER` who owns an order (`order.userId == current_user.id`) to cancel that order via `PATCH /api/orders/:id/cancel` while its status is `SUBMITTED`, transitioning status to `CANCELLED`.
+* **FR-09 (Customer Order Cancellation — Lab 7 Revision / F-07):** The system shall allow an authenticated `CUSTOMER` who owns an order (`order.userId == current_user.id`) to cancel that order via `PATCH /api/orders/:id/cancel` while its status is `SUBMITTED`, transitioning status to `CANCELLED`.
+* **FR-10 (Catalog & Inventory Administration — Sprint 2 / F-06):** The system shall allow authenticated `OPERATOR` users to create catalog items (`POST /api/operator/catalog`) and update unit price, description, stock quantity, and active state (`PATCH /api/operator/catalog/:id`).
+* **FR-11 (Operator Order Rejection — Sprint 2 / F-07):** The system shall allow authenticated `OPERATOR` users to reject a `SUBMITTED` order with a mandatory reason (`PATCH /api/operator/orders/:id/reject`), transitioning status to `REJECTED` and restoring inventory.
+* **FR-12 (Simulated Payment Processing — Sprint 2 / F-08):** The system shall track an authoritative simulated payment status (`UNPAID`, `PAID`, `REFUNDED`), transaction reference, and payment timestamp per order (`POST /api/orders/:id/pay`).
+* **FR-13 (Order Fulfillment & Ready-for-Pickup Lifecycle — Sprint 3 / F-09):** The system shall allow operators to advance `ACCEPTED` orders to `READY_FOR_PICKUP` and then to `COMPLETED`, recording server timestamps (`readyAt`, `completedAt`).
+* **FR-14 (Sales Analytics & Reporting Dashboard — Sprint 3 / F-10, Planned):** The system shall provide operators with aggregated realized revenue, order counts, and top-selling item breakdowns excluding cancelled/rejected orders.
+* **FR-15 (Customer Favorite Orders & Quick Re-Order — Sprint 3 / F-11, Planned):** The system shall allow customers to favorite orders and duplicate past orders at current authoritative catalog prices and stock limits.
 
 ---
 
@@ -71,6 +77,13 @@ Campus food and merchandise kiosks encounter long wait times, inefficient orderi
 * **BR-05 (Operator Role Protection):** Only authenticated users with the `OPERATOR` role may access operator queue endpoints and execute the `accept` transition. Customer attempts shall be rejected with `403 Forbidden`.
 * **BR-06 (Valid State Machine Transition):** An order may only be transitioned to `ACCEPTED` if its current status is `SUBMITTED`. Attempting to accept an order that is cancelled, already accepted, or in an invalid state shall be rejected with `409 Conflict`.
 * **BR-07 (Order Cancellation Boundary & Atomic Stock Restoration — Lab 7 Revision):** Only the owning `CUSTOMER` may cancel an order, and only while `order.status === 'SUBMITTED'`. Attempting to cancel an `ACCEPTED` or already `CANCELLED` order shall be rejected with `409 Conflict`. Non-owners or `OPERATOR` users attempting cancellation shall be rejected with `403 Forbidden`. Valid cancellation MUST atomically update `status` to `CANCELLED` and increment `catalog_items.stockQuantity` for every `OrderItem` inside a single database transaction.
+* **BR-08 (Catalog Admin Validation & Historical Immutability — Sprint 2 / F-06):** Only `OPERATOR` users may create or modify catalog items. `unitPrice` MUST be $> 0$ and `stockQuantity` MUST be an integer $\ge 0$. Catalog price modifications MUST NOT alter historical `OrderItem.unitPriceSnapshot`.
+* **BR-09 (Mandatory Rejection Reason & Atomic Refund/Stock Restore — Sprint 2 / F-07):** Only `OPERATOR` users may reject orders in `SUBMITTED` state, and a non-whitespace `rejectionReason` MUST be provided (`400 Bad Request` otherwise). Rejection atomically restores `stockQuantity` and refunds any `PAID` order.
+* **BR-10 (Authoritative Payment & Refund State Guard — Sprint 2 / F-08):** Orders initialize as `UNPAID`. Only the owning `CUSTOMER` may mark an active (`SUBMITTED` or `ACCEPTED`) `UNPAID` order as `PAID`. Cancelling or rejecting a `PAID` order atomically transitions `paymentStatus` to `REFUNDED`.
+* **BR-11 (Strict Sequential Fulfillment Transitions — Sprint 3 / F-09):** Orders may only enter `READY_FOR_PICKUP` from `ACCEPTED`, and `COMPLETED` from `READY_FOR_PICKUP`. State skips reject with `409 Conflict`.
+* **BR-12 (Realized Revenue Aggregation — Sprint 3 / F-10, Planned):** Analytics revenue totals MUST exclude `CANCELLED`, `REJECTED`, and `REFUNDED` orders.
+* **BR-13 (Re-Order Live Price & Stock Enforcement — Sprint 3 / F-11, Planned):** Re-ordering a historical order MUST re-price items using live `CatalogItem.unitPrice` and enforce live `stockQuantity` availability (`FR-03`, `BR-03`).
+* **BR-14 (UI Cart Quantity Cap — Lab 6 `DEF-QO-01`):** Client quantity selectors MUST clamp cart quantities to `item.stockQuantity` and disable the `+` control when `currentQty >= item.stockQuantity`.
 
 ---
 

@@ -1,0 +1,7 @@
+-- AlterEnum
+ALTER TYPE "OrderStatus" ADD VALUE 'READY_FOR_PICKUP';
+ALTER TYPE "OrderStatus" ADD VALUE 'COMPLETED';
+
+-- AlterTable
+ALTER TABLE "orders" ADD COLUMN "readyAt" TIMESTAMP(3),
+ADD COLUMN "completedAt" TIMESTAMP(3);
